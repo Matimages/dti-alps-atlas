@@ -1,8 +1,9 @@
-numpy
-scipy
-nibabel
-dipy
-matplotlib
-streamlit
-dcm2niix
-pytest
+# Versiones con las que se desarrolló y probó (2026-11-02)
+numpy==2.5.4
+scipy==1.18.1
+nibabel==5.4.2
+dipy==1.12.1
+matplotlib==3.11.2
+streamlit==1.66.1
+dcm2niix==1.0.20261029
+pytest==9.2.0
