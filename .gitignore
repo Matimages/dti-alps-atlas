@@ -1,0 +1,27 @@
+# Material de referencia y trabajo personal (NUNCA se versiona)
+utilidad_directa/
+referencia_anterior/
+scratch/
+
+# Datos de sujetos, templates y salidas
+*.nii
+*.nii.gz
+*.dcm
+*.zip
+dicom/
+datos/
+templates/
+salidas/
+resultados_app/
+
+# Entorno de Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Sistema y editores
+.DS_Store
+Thumbs.db
+.vscode/

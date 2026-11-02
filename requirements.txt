@@ -1,0 +1,8 @@
+numpy
+scipy
+nibabel
+dipy
+matplotlib
+streamlit
+dcm2niix
+pytest
