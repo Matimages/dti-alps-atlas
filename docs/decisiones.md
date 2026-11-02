@@ -32,7 +32,24 @@ Fuentes:
 
 ## ROIs
 
-(Se completa en la etapa 3 con la verificación contra `ROIs_JHU_ALPS/*.nii.gz`.)
+Vóxeles en la grilla JHU-ICBM-FA-1mm (182×218×182; x = 90 − i, y = −126 + j, z = −72 + k mm).
+
+| ROI | Vóxel (i,j,k) | mm (x,y,z) | [Liu] | [alps.sh] y `ROIs_JHU_ALPS/` |
+|---|---|---|---|---|
+| L-SCR (proyección) | (116,110,99) | (−26,−16,+27) | 116 | 116 |
+| R-SCR (proyección) | (64,110,99) | (+26,−16,+27) | 64 | 64 |
+| L-SLF (asociación) | (128,110,99) | (−38,−16,+27) | 128 | 128 |
+| R-SLF (asociación) | **(52,110,99)** | (+38,−16,+27) | **51** | **52** |
+
+- **Conflicto R-SLF.** El paper dice 51; el generador de esferas de `alps.sh` y el archivo `R_SLF.nii.gz` del repo
+  usan 52, que es simétrico con L-SLF respecto de i = 90. Decidido con el autor (2026-11-02): manda el archivo del
+  repo, porque es lo que el software publicado usa por defecto. Alternativa descartada: 51 (paper).
+- **Radio.** Se incluyen los vóxeles cuyo centro está a ≤ 2.5 mm del centro: 81 vóxeles por ROI, idéntico vóxel a vóxel
+  a los 4 archivos de `ROIs_JHU_ALPS/` descargados el 2026-11-02 (`tests/test_rois.py`).
+- **Origen de los archivos (no versionados, en `templates/`).** ROIs: `raw.githubusercontent.com/gbarisano/alps/main/ROIs_JHU_ALPS/`
+  (MIT). Template: `data/atlases/JHU/JHU-ICBM-FA-1mm.nii.gz` del paquete oficial de FSL `fsl-data_atlases-2103.0`
+  (canal conda `fsl.fmrib.ox.ac.uk/fsldownloads/fslconda/public`), sha256 `8edecc45…defe1882`. Tiene licencia FSL
+  (uso académico no comercial), así que no se redistribuye.
 
 ## Supuestos
 
