@@ -24,13 +24,13 @@ def ejecutar(ruta_entrada, carpeta_salida, bval=None, bvec=None, template=None, 
     nifti, f_bval, f_bvec = entrada.resolver_entrada(ruta_entrada, carpeta_salida, bval, bvec)
     datos, affine, gtab = entrada.cargar_dwi(nifti, f_bval, f_bvec)
 
-    avisar("2/5 Denoising MP-PCA y corrección de Gibbs (es la etapa más lenta)")
+    avisar("2/5 Denoising MP-PCA y corrección de Gibbs")
     datos = preproceso.preprocesar(datos)
 
     avisar("3/5 Ajustando el tensor")
     mapas = tensor.ajustar_tensor(datos, gtab)
 
-    avisar("4/5 Registro afín del FA al template JHU-ICBM-FA-1mm")
+    avisar("4/5 Registro afín del FA al template JHU-ICBM-FA-1mm (la etapa más lenta, ~5 min)")
     fa_template, affine_template = registro.cargar_template(template)
     mapa_afin = registro.registrar(mapas["FA"], affine, fa_template, affine_template)
     en_template = {k: registro.al_template(mapa_afin, mapas[k]) for k in ("Dxx", "Dyy", "Dzz", "FA", "color_FA")}

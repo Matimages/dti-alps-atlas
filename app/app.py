@@ -21,7 +21,7 @@ from alps.pipeline import _id_desde_ruta, ejecutar  # noqa: E402
 st.set_page_config(page_title="DTI-ALPS con atlas", layout="wide")
 st.title("Índice DTI-ALPS con atlas estándar")
 st.caption("Pipeline de Liu, Barisano et al. 2024 (Aging Dis), reimplementado con DIPY. "
-           "Template JHU-ICBM-FA-1mm, registro afín y ROIs esféricas de 2.5 mm. Tarda unos 10 minutos.")
+           "Template JHU-ICBM-FA-1mm, registro afín y ROIs esféricas de 2.5 mm. Tarda unos 8 minutos.")
 
 modo = st.radio("Entrada", ["Subir archivos", "Ruta local"], horizontal=True)
 entrada = bval = bvec = id_sujeto = None

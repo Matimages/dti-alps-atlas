@@ -64,7 +64,8 @@ App:
 En la app se suben los archivos (zip DICOM, o NIfTI + bval + bvec) o se escribe una ruta local. Los resultados quedan en
 `resultados_app/<id>/` y se pueden descargar desde la misma página.
 
-Un sujeto tarda unos 10 minutos en un PC de escritorio: MP-PCA ~3.5 min, Gibbs ~0.5 min, registro ~5.5 min.
+Un sujeto tarda unos 8 minutos en un PC de escritorio de 6 núcleos: MP-PCA ~1 min (en paralelo), Gibbs ~0.5 min,
+registro ~5.5 min.
 
 Pruebas:
 
