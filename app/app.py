@@ -16,12 +16,17 @@ try:  # DIPY escribe mensajes Unicode; la consola de Windows (cp1252) no los pue
 except AttributeError:
     pass
 
+from alps.expertos import alps_expertos  # noqa: E402
 from alps.pipeline import _id_desde_ruta, ejecutar  # noqa: E402
+
+
+def _fmt(valor):
+    return "—" if valor is None else f"{valor:.3f}"
 
 st.set_page_config(page_title="DTI-ALPS con atlas", layout="wide")
 st.title("Índice DTI-ALPS con atlas estándar")
 st.caption("Pipeline de Liu, Barisano et al. 2024 (Aging Dis), reimplementado con DIPY. "
-           "Template JHU-ICBM-FA-1mm, registro afín y ROIs esféricas de 2.5 mm. Tarda unos 8 minutos.")
+           "Template JHU-ICBM-FA-1mm, registro afín y ROIs esféricas de 2.5 mm.")
 
 modo = st.radio("Entrada", ["Subir archivos", "Ruta local"], horizontal=True)
 entrada = bval = bvec = id_sujeto = None
@@ -71,6 +76,16 @@ if "resultado" in st.session_state:
     c1.metric("ALPS izquierdo", f"{fila['alps_L']:.3f}")
     c2.metric("ALPS derecho", f"{fila['alps_R']:.3f}")
     c3.metric("ALPS (promedio)", f"{fila['alps']:.3f}")
+
+    # Solo aparece si el sujeto tiene ROIs manuales de los neurorradiólogos (controles de ds001378, sesión 1).
+    expertos = alps_expertos(fila["id"])
+    if expertos:
+        st.markdown("**ALPS de cada neurorradiólogo** (ROIs manuales en DSI Studio; Marín et al. 2025)")
+        for col, (nombre, r) in zip(st.columns(len(expertos)), expertos.items()):
+            with col.container(border=True):
+                st.metric(nombre, _fmt(r["alps"]))
+                st.caption(f"Izq. {_fmt(r['alps_L'])} · Der. {_fmt(r['alps_R'])}")
+        st.caption("— : esa ROI no viene identificada por nombre en la tabla exportada del neurorradiólogo.")
     st.image(str(rutas["figura"]))
     st.dataframe([fila], hide_index=True)
     st.caption(f"Archivos en {rutas['csv'].parent}")

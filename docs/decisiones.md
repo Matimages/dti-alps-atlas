@@ -51,6 +51,16 @@ Vóxeles en la grilla JHU-ICBM-FA-1mm (182×218×182; x = 90 − i, y = −126 +
   (canal conda `fsl.fmrib.ox.ac.uk/fsldownloads/fslconda/public`), sha256 `8edecc45…defe1882`. Tiene licencia FSL
   (uso académico no comercial), así que no se redistribuye.
 
+## Comparación con neurorradiólogos (solo en la app, modo experimental)
+
+| Decisión | Fuente | Alternativa descartada |
+|---|---|---|
+| Mostrar el ALPS de cada neurorradiólogo (BO, FT, PC, RR) solo si el sujeto es sub-controlNN_ses-01 y existe su tabla | [Marín]: ROIs manuales sobre los 16 controles de ds001378, sesión 1 | — |
+| ALPS del experto = mean(txx_proy, txx_asoc) / mean(tyy_proy, tzz_asoc), con las filas txx/tyy/tzz de su tabla de DSI Studio | `read_alps.m` (mismas filas y fórmula) | Recalcular con sus ROIs sobre nuestro tensor (es otra comparación, la de la etapa 2) |
+| ROIs identificadas por nombre (p_i, a_i, p_d, a_d; sin distinguir mayúsculas ni '-'/'_') | El orden de las columnas cambia entre archivos | Usar la posición de la columna, como `read_alps.m` |
+| Si falta el nombre de una ROI (p. ej. "New Region" en PC), ese hemisferio queda vacío | Trazabilidad: no se adivina qué ROI es. Decidido con el autor (2026-11-03) | Asignar "New Region"/"A.-" de PC como A-D |
+| Se ignoran las ROIs "SC" | Correo de la profesora: las dibujó ella, "no son buenas referencias" | — |
+
 ## Supuestos
 
 | Supuesto | Motivo | Alternativa |

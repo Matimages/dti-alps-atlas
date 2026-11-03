@@ -30,7 +30,7 @@ def ejecutar(ruta_entrada, carpeta_salida, bval=None, bvec=None, template=None, 
     avisar("3/5 Ajustando el tensor")
     mapas = tensor.ajustar_tensor(datos, gtab)
 
-    avisar("4/5 Registro afín del FA al template JHU-ICBM-FA-1mm (la etapa más lenta, ~5 min)")
+    avisar("4/5 Registro afín del FA al template JHU-ICBM-FA-1mm")
     fa_template, affine_template = registro.cargar_template(template)
     mapa_afin = registro.registrar(mapas["FA"], affine, fa_template, affine_template)
     en_template = {k: registro.al_template(mapa_afin, mapas[k]) for k in ("Dxx", "Dyy", "Dzz", "FA", "color_FA")}
