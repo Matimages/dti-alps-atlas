@@ -1,87 +1,73 @@
 # DTI-ALPS con atlas estándar
 
-Calcula el índice DTI-ALPS a partir de un DWI usando el pipeline con atlas de
-Liu, Barisano et al. 2024 (Aging Dis 15(4):1885-98, DOI 10.14336/AD.2023.0321-2; repositorio
-[gbarisano/alps](https://github.com/gbarisano/alps)), reimplementado en Python con DIPY.
+Sistematiza el cálculo del índice DTI-ALPS en MRI clínica de 1.5T. Proyecto de magíster BME423 (Universidad de Valparaíso).
 
-Proyecto de magíster BME423 (Universidad de Valparaíso). Las decisiones metodológicas y sus fuentes
-están en [`docs/decisiones.md`](docs/decisiones.md).
+Estado (2026-11-04): están implementados los pasos 1-3 del pipeline acordado con la prof. Stéren Chabert:
+entrada → corrección de eddy y movimiento → tensor DTI. El atlas con ROIs dibujadas por los neurorradiólogos, el registro y
+el índice ALPS (pasos 4-6) vienen después.
+
+- Fases, herramientas y fuentes: [`docs/pipeline.md`](docs/pipeline.md).
+- Cada decisión metodológica, con su fuente y la alternativa descartada: [`docs/decisiones.md`](docs/decisiones.md).
 
 ## Qué hace
 
-1. **Entrada**: NIfTI + `.bval` + `.bvec`, o una carpeta / `.zip` con DICOM (se convierte con dcm2niix).
-2. **Preproceso**: denoising MP-PCA y corrección de Gibbs.
-3. **Tensor**: máscara `median_otsu`; ajuste por mínimos cuadrados lineales; FA, Dxx, Dyy, Dzz en los ejes de la imagen.
-4. **Registro**: afín (12 gdl) del FA al template JHU-ICBM-FA 1 mm. Dxx, Dyy y Dzz se llevan al template con la misma matriz.
-5. **ROIs**: esferas de 2.5 mm de radio en L/R-SCR (proyección) y L/R-SLF (asociación), a la altura del cuerpo ventricular.
-6. **Índice**: `ALPS = mean(Dxx_proy, Dxx_asoc) / mean(Dyy_proy, Dzz_asoc)` por hemisferio, y su promedio.
+1. **Entrada.** Recibe una carpeta o `.zip` con DICOM (se convierte con dcm2niix), o un NIfTI con su `.bval` y su `.bvec`.
+   Un NIfTI sin `.bval`/`.bvec` se rechaza, porque el NIfTI no guarda los valores b ni las direcciones. Con eso crea el
+   archivo fuente de DSI Studio (`dwi.sz`).
+2. **Eddy + movimiento.** DSI Studio llama a FSL eddy y recarga el DWI corregido con los bvecs rotados (`dwi_eddy.sz`).
+3. **Tensor DTI.** DSI Studio reconstruye el DTI y exporta FA, MD, Dxx, Dyy y Dzz a NIfTI.
 
-Salidas: `alps.csv`, `rois_en_template.nii.gz` (etiquetas 1-4: L-SCR, R-SCR, L-SLF, R-SLF),
-`FA_en_template.nii.gz` y `qc_alps.png` (ROIs sobre el color-FA, convención radiológica).
+Salidas por sujeto: `dti.fz.{fa,md,txx,tyy,tzz}.nii.gz`, `qc_dti.png` (cortes de FA y de Dxx/Dyy/Dzz en convención
+radiológica), los `.sz` intermedios, los archivos de eddy (`dwi.sz.corrected.eddy_*`, entre ellos el reporte de outliers y el
+movimiento) y `dsi_studio.log`, con cada comando ejecutado y su salida.
 
-## Instalación
+## Requisitos
 
-Requiere Python 3.12.
+Linux o macOS. En Windows funciona dentro de WSL2 (Ubuntu), porque FSL no tiene versión nativa para Windows.
 
-```bash
-python -m venv .venv
-```
-```bash
-.venv/Scripts/python -m pip install -r requirements.txt
-```
-(En Linux/macOS: `.venv/bin/python`.)
-
-### Template (no viene en el repositorio)
-
-`JHU-ICBM-FA-1mm.nii.gz` es parte de FSL (licencia FSL: uso académico no comercial), así que no se redistribuye.
-Hay que dejarlo en `templates/JHU-ICBM-FA-1mm.nii.gz`, o indicar su ruta con `--template` o con la variable
-`DTI_ALPS_TEMPLATE`. Dónde conseguirlo:
-
-- Con FSL instalado: `$FSLDIR/data/atlases/JHU/JHU-ICBM-FA-1mm.nii.gz`.
-- Sin FSL: en el paquete `fsl-data_atlases` del canal conda oficial
-  (`https://fsl.fmrib.ox.ac.uk/fsldownloads/fslconda/public/noarch/`), archivo `data/atlases/JHU/JHU-ICBM-FA-1mm.nii.gz`.
-
-Opcional, para que `tests/test_rois.py` compare con las ROIs originales: descargar los 4 archivos de
-`ROIs_JHU_ALPS/` de gbarisano/alps (MIT) a `templates/`.
+1. **Python 3.12 o superior** y las dependencias:
+   ```bash
+   python3 -m venv ~/venvs/alps
+   ```
+   ```bash
+   ~/venvs/alps/bin/pip install -r requirements.txt
+   ```
+2. **DSI Studio** (probado con la release 2026.7.25): https://dsi-studio.labsolver.org/download.html (licencia propia de
+   DSI Studio, uso académico). Indica el ejecutable en la variable `DTI_ALPS_DSI_STUDIO`, o déjalo en el `PATH` como
+   `dsi_studio`. En macOS también se busca en `/Applications/dsi_studio.app/Contents/MacOS/dsi_studio`.
+3. **FSL** (probado con 6.0.7.23; trae `eddy`): https://fsl.fmrib.ox.ac.uk/fsl/docs/install/ (licencia FSL, uso
+   no comercial). El instalador deja definida la variable `FSLDIR`.
 
 ## Uso
 
-Línea de comandos:
-
 ```bash
-.venv/Scripts/python -m alps ruta/sub-01_dwi.nii.gz -o salidas/sub-01
+~/venvs/alps/bin/python -m alps ruta/sub-01_dwi.nii.gz -o salidas/sub-01
 ```
 
-Si `.bval` y `.bvec` no tienen el mismo nombre que el NIfTI, se indican con `--bval` y `--bvec`. La entrada también
+Si el `.bval` y el `.bvec` no tienen el mismo nombre que el NIfTI, se indican con `--bval` y `--bvec`. La entrada también
 puede ser una carpeta DICOM o un `.zip` DICOM.
 
 App:
 
 ```bash
-.venv/Scripts/streamlit run app/app.py
+~/venvs/alps/bin/streamlit run app/app.py
 ```
 
-En la app se suben los archivos (zip DICOM, o NIfTI + bval + bvec) o se escribe una ruta local. Los resultados quedan en
-`resultados_app/<id>/` y se pueden descargar desde la misma página.
-
-Un sujeto tarda unos 8 minutos en un PC de escritorio de 6 núcleos: MP-PCA ~1 min (en paralelo), Gibbs ~0.5 min,
-registro ~5.5 min.
+Un sujeto de ds001378 tarda unos 45 minutos, casi todo en eddy, que DSI Studio corre con un solo hilo.
 
 Pruebas:
 
 ```bash
-.venv/Scripts/python -m pytest tests
+~/venvs/alps/bin/python -m pytest tests
 ```
 
 ## Limitaciones
 
-- No corrige movimiento ni corrientes de Foucault (eddy), ni aplica TOPUP; Liu et al. sí lo hacen.
-- Registro solo afín (sin no lineal) y sin reorientación del tensor (igual que el default de gbarisano/alps).
-- El registro usa información mutua (DIPY), no la *correlation ratio* de FLIRT.
-- El índice depende de que el registro sea bueno: revisar siempre `qc_alps.png`.
-
-Detalle y fuentes de cada parámetro: [`docs/decisiones.md`](docs/decisiones.md).
+- Sin TOPUP: ds001378 no tiene una adquisición con codificación de fase inversa. Se asume fase AP (ver `docs/decisiones.md`).
+- DSI Studio llama a eddy con sus valores por defecto: sin reemplazo de outliers y sin slice-to-volume.
 
 ## Cita
 
-Si se usa, citar a Liu X, Barisano G, et al. (2024) y a Taoka T, et al. (2017, Jpn J Radiol 35:172-8).
+Si se usa, citar DSI Studio (Yeh, doi:10.1038/s41592-025-02762-8), FSL eddy (Andersson & Sotiropoulos 2016,
+NeuroImage 125:1063-78), Marín et al. 2025 (Open Neuroimaging J), Liu X, Barisano G, et al. (2024, Aging Dis) y
+Taoka T, et al. (2017, Jpn J Radiol 35:172-8).

@@ -1,31 +1,53 @@
-"""Etapa 2b: máscara cerebral y ajuste del tensor.
+"""Paso 3: reconstrucción DTI con DSI Studio y exportación de los mapas a NIfTI.
 
-- Máscara: median_otsu sobre los volúmenes b0, con los defaults de DIPY (median_radius=4, numpass=4).
-  Lo indicó el autor del proyecto; Liu usa bet sobre el b0. SUPUESTO: los defaults sirven para estos datos.
-- Ajuste: mínimos cuadrados lineales (fit_method="OLS"), equivalente a `dtifit` sin `--wls`
-  de gbarisano/alps (decidido con el autor el 2026-11-02).
-- Dxx, Dyy y Dzz son los elementos diagonales del tensor en los ejes de la imagen, como
-  `fslroi dti_tensor 0/3/5` en alps.sh. No se reorienta el tensor.
-  Unidades: mm²/s, porque los valores b vienen en s/mm².
+- `dsi_studio --action=rec --method=1` (1 = DTI; https://dsi-studio.labsolver.org/doc/cli_t2.html), con el tensor
+  como salida adicional. Así lo hacen Marín et al. 2025 y la tesis previa, que piden "tensor" para obtener txx, tyy y tzz.
+  Los demás parámetros (máscara, remuestreo, etc.) quedan en los defaults de DSI Studio; se registran en dsi_studio.log.
+- `dsi_studio --action=exp --export=fa,md,txx,tyy,tzz` (https://dsi-studio.labsolver.org/doc/cli_exp.html):
+  cada mapa queda en <archivo .fz>.<métrica>.nii.gz.
+- txx, tyy y tzz son Dxx, Dyy y Dzz, los elementos diagonales del tensor en los ejes de la imagen. Son las mismas filas que
+  exportaron los neurorradiólogos desde DSI Studio (`utilidad_directa/Archive 4`) y las que usa el índice ALPS (Taoka 2017).
 """
+from pathlib import Path
+
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import nibabel as nib
 import numpy as np
-from dipy.reconst.dti import TensorModel, color_fa
-from dipy.segment.mask import median_otsu
+
+from . import dsi_studio
+
+METRICAS = ("fa", "md", "txx", "tyy", "tzz")
 
 
-def ajustar_tensor(datos, gtab):
-    """Devuelve un dict con mascara, FA, MD, Dxx, Dyy, Dzz y color-FA (RGB), en el espacio nativo."""
-    b0s = np.where(gtab.b0s_mask)[0]
-    _, mascara = median_otsu(datos, vol_idx=b0s, median_radius=4, numpass=4)
-    ajuste = TensorModel(gtab, fit_method="OLS").fit(datos, mask=mascara)
-    tensor = ajuste.quadratic_form  # (..., 3, 3)
-    fa = np.clip(np.nan_to_num(ajuste.fa), 0, 1)
-    return {
-        "mascara": mascara,
-        "FA": fa,
-        "MD": ajuste.md,
-        "Dxx": tensor[..., 0, 0],
-        "Dyy": tensor[..., 1, 1],
-        "Dzz": tensor[..., 2, 2],
-        "color_FA": color_fa(fa, ajuste.evecs),
-    }
+def reconstruir_dti(src, carpeta):
+    """Reconstruye el DTI desde el .sz y exporta los mapas. Devuelve {métrica: ruta NIfTI}."""
+    fz = Path(carpeta) / "dti.fz"
+    dsi_studio.correr("rec", carpeta, source=Path(src).resolve(), method=1, other_output="md,tensor",
+                      output=fz.name, overwrite=1)
+    dsi_studio.correr("exp", carpeta, source=fz.name, export=",".join(METRICAS))
+    return {m: Path(carpeta) / f"{fz.name}.{m}.nii.gz" for m in METRICAS}
+
+
+def figura_qc(mapas, ruta, titulo=""):
+    """FA en tres cortes axiales y Dxx, Dyy, Dzz en el corte central, en convención radiológica."""
+    img = {m: nib.as_closest_canonical(nib.load(str(p))).get_fdata() for m, p in mapas.items()}  # RAS
+    nk = img["fa"].shape[2]
+    cortes = [int(nk * f) for f in (0.45, 0.6, 0.75)]
+    fig, ejes = plt.subplots(2, 3, figsize=(11, 8))
+    paneles = [("fa", k, f"FA, corte {k}") for k in cortes] + \
+              [(m, cortes[1], f"{m.replace('t', 'D', 1)} (corte {cortes[1]})") for m in ("txx", "tyy", "tzz")]
+    for ax, (m, k, rotulo) in zip(ejes.flat, paneles):
+        corte = img[m][::-1, :, k].T  # i invertido: la derecha del paciente queda a la izquierda (radiológica)
+        tope = 1 if m == "fa" else np.percentile(img[m][img[m] > 0], 99)
+        ax.imshow(corte, origin="lower", cmap="gray", vmin=0, vmax=tope)
+        ax.set_title(rotulo, fontsize=10)
+        ax.set_axis_off()
+        ax.text(0.02, 0.5, "R", color="w", transform=ax.transAxes, va="center")
+        ax.text(0.94, 0.5, "L", color="w", transform=ax.transAxes, va="center")
+    fig.suptitle(f"{titulo}  Mapas DTI de DSI Studio (convención radiológica)")
+    fig.tight_layout()
+    fig.savefig(ruta, dpi=100)
+    plt.close(fig)

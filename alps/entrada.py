@@ -1,20 +1,25 @@
-"""Etapa 1: lectura del DWI.
+"""Paso 1: entrada del DWI y creación del archivo fuente de DSI Studio (.sz).
 
-Acepta tres formas de entrada:
-- NIfTI (.nii / .nii.gz) con .bval y .bvec al lado (mismo nombre) o indicados explícitamente;
-- carpeta con DICOM;
-- archivo .zip con DICOM.
+Acepta:
+- carpeta con DICOM o .zip con DICOM: se convierte a NIfTI + .bval + .bvec con dcm2niix (C. Rorden,
+  https://github.com/rordenlab/dcm2niix; paquete pip `dcm2niix`). Los bvec quedan en los ejes de la imagen (convención FSL).
+- NIfTI (.nii / .nii.gz): DEBE venir con su .bval y su .bvec. El encabezado NIfTI no guarda los valores b ni las
+  direcciones del gradiente. Por eso, cuando dcm2niix convierte un DICOM, los deja en esos dos archivos de texto aparte.
+  En ds001378 (formato BIDS) vienen junto al NIfTI con el mismo nombre (sub-XX_ses-XX_dwi.bval / .bvec).
+  Sin ellos no se puede calcular el tensor, así que se detiene con error. No basta con avisar: DSI Studio solo advierte
+  y crea el .sz igual (verificado con la release 2026.7.25).
 
-Los DICOM se convierten con dcm2niix (Rorden; paquete pip `dcm2niix`), que genera NIfTI + .bval + .bvec
-con los bvec en los ejes de la imagen (convención FSL), igual a lo que espera dtifit en [alps.sh].
+Después, `dsi_studio --action=src --source=<nifti> --bval=<bval> --bvec=<bvec>` crea el .sz
+(https://dsi-studio.labsolver.org/doc/cli_t1.html). Es el mismo primer paso de Marín et al. 2025 y de la tesis (archivo SRC).
 """
 import tempfile
 import zipfile
 from pathlib import Path
 
 import nibabel as nib
-from dipy.core.gradients import gradient_table
-from dipy.io.gradients import read_bvals_bvecs
+import numpy as np
+
+from . import dsi_studio
 
 
 def _quitar_ext(ruta):
@@ -53,20 +58,41 @@ def resolver_entrada(entrada, carpeta_trabajo, bval=None, bvec=None):
         entrada = carpeta_dicom
     if entrada.is_dir():
         entrada = dicom_a_nifti(entrada, carpeta_trabajo / "nifti")
+    if not entrada.exists():
+        raise FileNotFoundError(f"No se encontró {entrada}")
     base = _quitar_ext(entrada)
     bval = Path(bval) if bval else base.with_suffix(".bval")
     bvec = Path(bvec) if bvec else base.with_suffix(".bvec")
-    for f in (entrada, bval, bvec):
-        if not f.exists():
-            raise FileNotFoundError(f"No se encontró {f}")
+    faltan = [f.name for f in (bval, bvec) if not f.exists()]
+    if faltan:
+        raise FileNotFoundError(
+            f"Falta {' y '.join(faltan)}. Un NIfTI no guarda los valores b ni las direcciones del gradiente: "
+            "hay que entregar el .bval y el .bvec que generó la conversión desde DICOM, o entregar el DICOM.")
+    validar(entrada, bval, bvec)
     return entrada, bval, bvec
 
 
-def cargar_dwi(nifti, bval, bvec):
-    """Carga el DWI: devuelve (datos 4D float32, affine, gtab de DIPY)."""
-    img = nib.load(str(nifti))
-    datos = img.get_fdata(dtype="float32")
-    bvals, bvecs = read_bvals_bvecs(str(bval), str(bvec))
-    if datos.ndim != 4 or datos.shape[3] != len(bvals):
-        raise ValueError(f"El DWI tiene forma {datos.shape} pero hay {len(bvals)} valores b.")
-    return datos, img.affine, gradient_table(bvals, bvecs=bvecs)
+def validar(nifti, bval, bvec):
+    """Comprueba que haya un valor b y una dirección por volumen, y al menos un b0.
+
+    Umbral b0 = 50 s/mm²: el default `b0_threshold` de `dipy.core.gradients.gradient_table`.
+    """
+    forma = nib.load(str(nifti)).shape
+    n_vol = forma[3] if len(forma) == 4 else 1
+    bvals = np.loadtxt(bval, ndmin=1)
+    bvecs = np.loadtxt(bvec, ndmin=2)
+    if bvecs.shape[0] != 3:
+        bvecs = bvecs.T
+    if not (len(bvals) == bvecs.shape[1] == n_vol):
+        raise ValueError(f"El DWI tiene {n_vol} volúmenes, el .bval {len(bvals)} valores y el .bvec "
+                         f"{bvecs.shape[1]} direcciones: deben coincidir.")
+    if not np.any(bvals < 50):
+        raise ValueError("No hay ningún volumen b0 (b < 50 s/mm²).")
+
+
+def crear_src(nifti, bval, bvec, carpeta):
+    """Crea <carpeta>/dwi.sz con DSI Studio y devuelve su ruta."""
+    salida = Path(carpeta) / "dwi.sz"
+    dsi_studio.correr("src", carpeta, source=Path(nifti).resolve(), bval=Path(bval).resolve(),
+                      bvec=Path(bvec).resolve(), output=salida.name, overwrite=1)
+    return salida
