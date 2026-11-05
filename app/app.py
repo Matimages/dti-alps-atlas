@@ -1,7 +1,8 @@
 """App Streamlit delgada: recibe el DWI, llama a alps.pipeline.ejecutar y muestra el resultado.
 
-Uso: streamlit run app/app.py
+Uso: streamlit run app/app.py (Linux o macOS; en Windows, dentro de WSL)
 """
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -12,6 +13,16 @@ RAIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAIZ))
 
 from alps.pipeline import _id_desde_ruta, ejecutar  # noqa: E402
+
+
+def _ruta_local(texto):
+    """Acepta rutas de Windows (C:\\...) cuando la app corre en WSL, donde ese disco está en /mnt/c."""
+    texto = texto.strip().strip('"')
+    windows = re.match(r"^([A-Za-z]):[\\/](.*)$", texto)
+    if windows and sys.platform != "win32" and Path("/mnt").is_dir():
+        return Path("/mnt", windows[1].lower(), *re.split(r"[\\/]+", windows[2]))
+    return Path(texto)
+
 
 st.set_page_config(page_title="DTI-ALPS con atlas", layout="wide")
 st.title("Índice DTI-ALPS con atlas estándar")
@@ -41,7 +52,7 @@ if modo == "Subir archivos":
 else:
     ruta = st.text_input("Ruta a un NIfTI DWI (con .bval/.bvec del mismo nombre), carpeta DICOM o .zip DICOM")
     if ruta:
-        entrada = Path(ruta.strip().strip('"'))
+        entrada = _ruta_local(ruta)
         if not entrada.exists():
             st.warning(f"No existe: {entrada}")
             entrada = None

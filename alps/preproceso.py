@@ -17,7 +17,6 @@ eliminar información. Marín et al. 2025 hicieron esta misma corrección con DS
   --slm=none, --repol=False (no reemplaza cortes outlier), sin slice-to-volume (--mporder=0) y --nthr=1 (un solo hilo;
   ~45 min por sujeto). La guía de eddy recomienda considerar `--slm=linear` cuando hay pocas direcciones (aquí 15).
   Verificado en <sujeto>/dwi.sz.corrected.eddy_values_of_all_input_parameters.
-- Si ya existe una corrección previa en la carpeta (dwi.sz.corrected.*), DSI Studio la reutiliza y no vuelve a correr eddy.
 """
 import os
 import shutil

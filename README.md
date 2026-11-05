@@ -47,11 +47,23 @@ Linux o macOS. En Windows funciona dentro de WSL2 (Ubuntu), porque FSL no tiene 
 Si el `.bval` y el `.bvec` no tienen el mismo nombre que el NIfTI, se indican con `--bval` y `--bvec`. La entrada también
 puede ser una carpeta DICOM o un `.zip` DICOM.
 
-App:
+### App local
+
+En Linux o macOS, desde la carpeta del repositorio:
 
 ```bash
 ~/venvs/alps/bin/streamlit run app/app.py
 ```
+
+En Windows con WSL, desde PowerShell (cambia la ruta del repositorio si está en otra carpeta):
+
+```bash
+wsl -d Ubuntu -- bash -lc "cd '/mnt/c/Users/mirts/Desktop/DTI ALPS MRTS/dti-alps-atlas' && DTI_ALPS_DSI_STUDIO=~/herramientas/dsi_studio/dsi-studio-linux-universal-cpu/dsi_studio ~/venvs/alps/bin/streamlit run app/app.py --server.headless true"
+```
+
+Después se abre http://localhost:8501 en el navegador. Se puede subir el DWI (zip DICOM, o NIfTI + bval + bvec) o
+escribir su ruta; en WSL también se aceptan rutas de Windows (`C:\...`). Los resultados quedan en `resultados_app/<id>/`
+y se descargan desde la misma página.
 
 Un sujeto de ds001378 tarda unos 45 minutos, casi todo en eddy, que DSI Studio corre con un solo hilo.
 

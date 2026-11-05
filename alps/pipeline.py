@@ -21,6 +21,11 @@ def ejecutar(ruta_entrada, carpeta_salida, bval=None, bvec=None, id_sujeto=None,
     carpeta_salida = Path(carpeta_salida).resolve()
     carpeta_salida.mkdir(parents=True, exist_ok=True)
     id_sujeto = id_sujeto or _id_desde_ruta(ruta_entrada)
+    # Se borran los archivos de una corrida anterior: DSI Studio intenta reutilizar una corrección eddy previa
+    # (dwi.sz.corrected.*) y, si está incompleta, falla.
+    for patron in ("dwi.sz*", "dwi_eddy.sz", "dti.fz*", "qc_dti.png", "dsi_studio.log"):
+        for viejo in carpeta_salida.glob(patron):
+            viejo.unlink()
 
     avisar("1/3 Leyendo el DWI y creando el archivo fuente de DSI Studio")
     nifti, f_bval, f_bvec = entrada.resolver_entrada(ruta_entrada, carpeta_salida, bval, bvec)
