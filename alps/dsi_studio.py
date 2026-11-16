@@ -37,7 +37,7 @@ def correr(accion, carpeta, **parametros):
                        errors="replace")
     log = _ANSI.sub("", r.stdout + r.stderr)
     with open(Path(carpeta) / "dsi_studio.log", "a", encoding="utf-8") as f:
-        f.write(" ".join(comando) + "\n" + log + "\n")
+        f.write("$ " + " ".join(comando) + "\n" + log + "\n")  # "$ " marca el comando (lo lee alps/informe.py)
     problemas = [linea.strip("│├└─ ") for linea in log.splitlines() if "❗" in linea or "❌" in linea]
     if r.returncode != 0 or problemas:
         raise RuntimeError(f"DSI Studio --action={accion} falló: " + ("; ".join(problemas) or log[-500:]))

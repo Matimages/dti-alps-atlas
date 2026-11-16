@@ -40,6 +40,8 @@ las herramientas y fuentes de cada paso está en [`pipeline.md`](pipeline.md).
 | Sin TOPUP | ds001378 no tiene una adquisición con fase inversa | — |
 | Máscara para eddy: U-Net de DSI Studio | [DSI] `run_eddy` (default) | `bet` |
 | Reconstrucción DTI: `--method=1 --other_output=md,tensor`; el resto en los defaults de DSI Studio (máscara automática, remuestreo `make_isotropic=2`, `dti_ignore_high_b=1`) | [DSI] cli_t2; [Marín] y tesis: DTI pidiendo "tensor" | Tensor con DIPY (OLS), implementado antes |
+| Figura QC con color-FA = \|V1\|·FA, calculado a partir del tensor completo exportado (también txy, txz, tyz); solo para mirar | Pajevic & Pierpaoli 1999 (Magn Reson Med 42:526-40); [Marín]: los neurorradiólogos ubican las fibras por color | FA en escala de grises (versión anterior) |
+| Figura QC de eddy: DWI original y corregido, y su diferencia, en el corte outlier más extremo (o en el volumen con más movimiento) | [eddy] `.eddy_outlier_report` y `.eddy_movement_rms`. DSI Studio borra el NIfTI que le pasa a eddy, así que se compara con el original (mismos datos), ambos llevados a RAS | Solo métricas numéricas |
 | Mapas exportados: fa, md, txx, tyy, tzz (`--action=exp`) | [DSI] cli_exp; txx/tyy/tzz son las filas que usan los neurorradiólogos (`Archive 4`) | — |
 
 Observaciones para discutir con la profesora:

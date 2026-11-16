@@ -17,8 +17,8 @@ def main():
     a = p.parse_args()
 
     id_sujeto = _id_desde_ruta(a.entrada)
-    archivos = ejecutar(a.entrada, a.salida or f"salidas/{id_sujeto}", a.bval, a.bvec, id_sujeto)
-    for nombre, ruta in archivos.items():
+    r = ejecutar(a.entrada, a.salida or f"salidas/{id_sujeto}", a.bval, a.bvec, id_sujeto)
+    for nombre, ruta in r["archivos"].items():
         print(f"  {nombre}: {ruta}")
 
 
