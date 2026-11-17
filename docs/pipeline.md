@@ -3,7 +3,7 @@
 Diagrama vivo del proyecto: se actualiza cada vez que se implementa o cambia una fase.
 El detalle de cada decisión, con su alternativa descartada, está en [`decisiones.md`](decisiones.md).
 
-Estructura acordada con la prof. Stéren Chabert (reunión del 2026-11-03). Pasos 1-3 implementados; pasos 4-6 pendientes.
+ Pasos 1-3 implementados; pasos 4-6 pendientes.
 
 ```mermaid
 flowchart TD
