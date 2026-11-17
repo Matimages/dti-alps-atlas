@@ -128,8 +128,7 @@ with procesar:
 
 with candidatos:
     st.markdown(
-        "Según lo acordado con la prof. Chabert, los neurorradiólogos confirmarán el atlas y dibujarán las ROIs sobre él. "
-        "Aquí se comparan dos candidatos en el corte de las ROIs de Liu et al. 2024. Ambos vienen con FSL y están en la "
+        "Se comparan dos candidatos en el corte de las ROIs de Liu et al. 2024. Ambos vienen con FSL y están en la "
         "misma grilla MNI de 1 mm.")
     c1, c2 = st.columns(2)
     c1.markdown("**JHU-ICBM-FA 1 mm**: el template de Liu et al. 2024. Solo FA, sin la dirección de las fibras.")
