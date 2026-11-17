@@ -36,5 +36,5 @@ dentro de la carpeta de cada sujeto.
 ## Plataforma
 
 DSI Studio corre nativo en Linux, macOS y Windows. FSL corre en Linux y macOS, y en Windows solo dentro de WSL
-(https://fsl.fmrib.ox.ac.uk/fsl/docs/install/windows.html). Por eso el desarrollo se hace en WSL2 Ubuntu, que es Unix como
-macOS, el sistema que usan los neurorradiólogos.
+. Por eso el desarrollo se hace en WSL2 Ubuntu.
+
