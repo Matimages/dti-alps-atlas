@@ -57,20 +57,20 @@ def _mostrar_paso(paso, carpeta):
 
 def _mostrar_resultado(carpeta, versiones, pasos, fila=None):
     rutas = _archivos(carpeta)
-    st.subheader(f"Resultado: {carpeta.name}")
+    st.subheader(f"Resultado · {carpeta.name}")
     if fila:
-        c1, c2, c3 = st.columns(3)
-        c1.metric("ALPS izquierdo", f"{fila['alps_L']:.3f}")
-        c2.metric("ALPS derecho", f"{fila['alps_R']:.3f}")
-        c3.metric("ALPS (promedio)", f"{fila['alps']:.3f}")
+        with st.container(border=True):
+            c1, c2, c3 = st.columns(3)
+            c1.metric("ALPS promedio", f"{fila['alps']:.3f}")
+            c2.metric("Hemisferio izquierdo", f"{fila['alps_L']:.3f}")
+            c3.metric("Hemisferio derecho", f"{fila['alps_R']:.3f}")
     st.image(str(rutas.get("figura_alps", rutas.get("figura"))))
-    st.subheader("Detalle del procesamiento")
-    st.caption("Qué hizo cada paso, con qué parámetros y en qué documentación se basa. Versiones: "
-               + " · ".join(f"{k} {v}" for k, v in versiones.items()))
-    for pestaña, paso in zip(st.tabs([p["titulo"] for p in pasos]), pasos):
-        with pestaña:
-            _mostrar_paso(paso, carpeta)
-    st.subheader("Descargas")
+    with st.expander("Detalle técnico: qué hizo cada paso, con qué parámetros y en qué documentación se basa"):
+        st.caption("Versiones: " + " · ".join(f"{k} {v}" for k, v in versiones.items()))
+        for pestaña, paso in zip(st.tabs([p["titulo"] for p in pasos]), pasos):
+            with pestaña:
+                _mostrar_paso(paso, carpeta)
+    st.markdown("##### Descargas")
     st.caption(f"Carpeta: {carpeta}")
     lista = list(rutas.items())
     for i in range(0, len(lista), 6):  # filas de hasta 6 botones
@@ -78,10 +78,14 @@ def _mostrar_resultado(carpeta, versiones, pasos, fila=None):
             col.download_button(NOMBRES[nombre], ruta.read_bytes(), ruta.name, width="stretch")
 
 
-st.set_page_config(page_title="DTI-ALPS con atlas", layout="wide")
-st.title("Índice DTI-ALPS con atlas estándar")
-st.caption("Entrada → corrección de eddy y movimiento (FSL eddy) → registro afín al atlas HCP1065 → tensor DTI en el "
-           "atlas (DSI Studio) → índice ALPS en las ROIs de referencia de Liu et al. 2024.")
+st.set_page_config(page_title="DTI-ALPS", page_icon="🧠", layout="wide")
+# Estilo: el tema (colores claros, azul) va en app/abrir_app.command; aquí solo el tamaño y color de las cifras.
+st.markdown("<style>[data-testid='stMetricValue']{color:#1F4E79;font-weight:600}</style>", unsafe_allow_html=True)
+st.title("Índice DTI-ALPS")
+st.markdown("Análisis de la difusividad a lo largo del espacio perivascular (Taoka et al. 2017), propuesto como marcador "
+            "de la función glinfática, calculado con un atlas estándar en DTI clínica de 1.5T.")
+st.caption("FSL eddy → registro afín al atlas HCP1065 → tensor DTI en el atlas (DSI Studio) → ALPS en las ROIs de "
+           "referencia de Liu et al. 2024 · Magíster BME423, Universidad de Valparaíso")
 
 procesar, candidatos = st.tabs(["Procesar un sujeto", "Atlas y ROIs de referencia"])
 
