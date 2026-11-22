@@ -37,5 +37,5 @@ cada paso (también se ve en la app).
 ## Plataforma e instalación
 
 Corre en macOS (Apple Silicon o Intel) y Linux; en Windows, dentro de WSL2. `app/instalar.sh` instala lo mínimo en
-`herramientas/`: micromamba, un entorno con Python y solo los paquetes de FSL que se usan (`fsl-eddy`, `fsl-bet2`,
+`herramientas/`: micromamba, un entorno con Python, otro aparte con solo los paquetes de FSL que se usan (`fsl-eddy`, `fsl-bet2`,
 `fsl-data_standard`, `fsl-data_atlases`) y DSI Studio. `app/abrir_app.command` abre la app.

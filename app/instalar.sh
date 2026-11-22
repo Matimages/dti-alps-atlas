@@ -4,10 +4,15 @@
 #
 # Qué instala y de dónde:
 # - micromamba (gestor de entornos conda en un solo archivo): https://mamba.readthedocs.io/
-# - Un entorno con Python 3.12 y las librerías de requirements.txt (pip), más solo las partes de FSL que se usan,
-#   desde el canal conda oficial de FSL (https://fsl.fmrib.ox.ac.uk/fsl/docs/install/conda.html):
+# - Dos entornos separados:
+#   herramientas/entorno: solo las partes de FSL que se usan, desde el canal conda oficial de FSL
+#   (https://fsl.fmrib.ox.ac.uk/fsl/docs/install/conda.html):
 #   fsl-eddy (eddy_cpu), fsl-bet2 (máscara), fsl-data_standard (atlas HCP1065) y fsl-data_atlases (JHU, comparación).
 #   Licencia FSL: uso académico no comercial.
+#   herramientas/python: Python 3.12 (conda-forge) con las librerías de requirements.txt (pip).
+#   Van separados porque en macOS, mezclados, el proceso de Python cargaba dos copias de OpenMP (libomp: una del entorno
+#   conda de FSL y otra de las librerías pip) y se cerraba con "OMP: Error #15" (probado en un Mac Apple Silicon, 2026-11-22).
+#   La app llama a eddy y bet2 como programas aparte, así que Python no necesita las librerías de FSL.
 # - DSI Studio, release 2026.7.25 (https://github.com/frankyeh/DSI-Studio/releases). Licencia propia, uso académico.
 set -euo pipefail
 
@@ -35,8 +40,12 @@ if [ ! -x "$H/entorno/bin/python" ]; then
   "$H/bin/micromamba" clean -a -y >/dev/null  # borra la caché de descargas
 fi
 
-echo "== 3/4 Librerías de Python"
-"$H/entorno/bin/python" -m pip install -q --no-cache-dir -r "$REPO/requirements.txt"
+echo "== 3/4 Python y sus librerías (entorno aparte del de FSL)"
+if [ ! -x "$H/python/bin/python" ]; then
+  "$H/bin/micromamba" create -y -p "$H/python" -c conda-forge python=3.12
+  "$H/bin/micromamba" clean -a -y >/dev/null
+fi
+"$H/python/bin/python" -m pip install -q --no-cache-dir -r "$REPO/requirements.txt"
 
 echo "== 4/4 DSI Studio $DSI_VERSION"
 if [ ! -d "$H/dsi_studio" ]; then
@@ -45,7 +54,7 @@ if [ ! -d "$H/dsi_studio" ]; then
   if command -v unzip >/dev/null; then  # macOS trae unzip (respeta los enlaces dentro del .app)
     (cd "$H/dsi_studio" && unzip -q "$H/$DSI_ZIP")
   else
-    "$H/entorno/bin/python" -m zipfile -e "$H/$DSI_ZIP" "$H/dsi_studio"
+    "$H/python/bin/python" -m zipfile -e "$H/$DSI_ZIP" "$H/dsi_studio"
   fi
   rm "$H/$DSI_ZIP"
   [ "$(uname -s)" = Darwin ] && xattr -dr com.apple.quarantine "$H/dsi_studio" || true
@@ -59,12 +68,12 @@ cat > "$H/config.sh" <<EOF
 export FSLDIR="$H/entorno"
 export FSLOUTPUTTYPE=NIFTI_GZ
 export DTI_ALPS_DSI_STUDIO="$DSI"
-export PATH="$H/entorno/bin:\$PATH"
+export PATH="$H/python/bin:$H/entorno/bin:\$PATH"
 EOF
 
 echo "== Verificación"
 . "$H/config.sh"
 ls "$FSLDIR/bin/eddy_cpu" "$FSLDIR/bin/bet2" "$FSLDIR/data/standard/FSL_HCP1065_FA_1mm.nii.gz"
 QT_QPA_PLATFORM=offscreen "$DSI" --version | head -1
-(cd "$REPO" && "$H/entorno/bin/python" -m pytest -q tests | tail -1)
+(cd "$REPO" && "$H/python/bin/python" -m pytest -q tests | tail -1)
 echo "Listo. Para abrir la app: doble clic en app/abrir_app.command (macOS) o bash app/abrir_app.command"

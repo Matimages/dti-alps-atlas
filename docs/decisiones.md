@@ -37,7 +37,7 @@ atlas → 5 DWI al atlas → 6 tensor en el atlas → 7 ALPS. Diagrama: [`pipeli
 | Registro afín 12 gdl con DIPY (información mutua) al FA del HCP1065 | [Liu]; [alps.sh] `flirt -dof 12`; **SUPUESTO**: parámetros del tutorial de [DIPY] | Registro no lineal |
 | Bvecs rotados con la parte rotacional (descomposición polar) de la matriz afín | Leemans & Jones 2009 (Magn Reson Med 61:1336-49); Alexander et al. 2001 (IEEE TMI 20:1131-9); convención FSL según la documentación de MRtrix3. Verificado con `tests/test_registro.py` | No rotar los bvecs |
 | Tensor en el atlas con DSI Studio, `--make_isotropic=0` (los mapas quedan en la grilla de 1 mm de las ROIs) | [DSI] cli_t2; [Marín] | DIPY |
-| Instalación mínima: micromamba + paquetes `fsl-eddy`, `fsl-bet2`, `fsl-data_standard`, `fsl-data_atlases` del canal conda de FSL + DSI Studio (`app/instalar.sh`) | [Reunión 2]: que corra en el Mac de la profesora con la menor cantidad de módulos | FSL completo (varios GB) |
+| Instalación mínima: micromamba + paquetes `fsl-eddy`, `fsl-bet2`, `fsl-data_standard`, `fsl-data_atlases` del canal conda de FSL + DSI Studio (`app/instalar.sh`). Python y sus librerías van en un entorno aparte del de FSL: mezclados, en macOS se cargaban dos copias de OpenMP (`OMP: Error #15`, Mac Apple Silicon, 2026-11-22) | [Reunión 2]: que corra en el Mac de la profesora con la menor cantidad de módulos | FSL completo (varios GB) |
 
 ## Pasos 1-3 (reestructuración del 2026-11-03)
 

@@ -29,8 +29,8 @@ Una sola vez, desde la carpeta del repositorio. No usa `sudo` y deja todo dentro
 bash app/instalar.sh
 ```
 
-Instala micromamba, un entorno con Python 3.12 y las librerías de `requirements.txt`, **solo** los paquetes de FSL que
-se usan (`fsl-eddy`, `fsl-bet2`, `fsl-data_standard`, `fsl-data_atlases`; licencia FSL, uso no comercial) y DSI Studio
+Instala micromamba, un entorno con Python 3.12 y las librerías de `requirements.txt`, otro entorno aparte con **solo** los
+paquetes de FSL que se usan (`fsl-eddy`, `fsl-bet2`, `fsl-data_standard`, `fsl-data_atlases`; licencia FSL, uso no comercial) y DSI Studio
 2026.7.25 (licencia propia, uso académico). Descarga unos 700 MB. Al final verifica las herramientas y corre los tests.
 
 En Windows: dentro de WSL2 (Ubuntu), porque FSL no tiene versión nativa para Windows.
@@ -50,13 +50,13 @@ abre un resultado anterior sin volver a procesar.
 Línea de comandos (después de `. herramientas/config.sh`):
 
 ```bash
-herramientas/entorno/bin/python -m alps ruta/sub-01_dwi.nii.gz -o salidas/sub-01
+herramientas/python/bin/python -m alps ruta/sub-01_dwi.nii.gz -o salidas/sub-01
 ```
 
 Pruebas:
 
 ```bash
-herramientas/entorno/bin/python -m pytest tests
+herramientas/python/bin/python -m pytest tests
 ```
 
 ## Limitaciones
