@@ -25,3 +25,6 @@ __pycache__/
 .DS_Store
 Thumbs.db
 .vscode/
+
+# Herramientas instaladas por app/instalar.sh (micromamba, entorno con FSL, DSI Studio)
+herramientas/

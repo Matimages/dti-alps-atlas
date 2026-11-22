@@ -2,81 +2,68 @@
 
 Sistematiza el cálculo del índice DTI-ALPS en MRI clínica de 1.5T. Proyecto de magíster BME423 (Universidad de Valparaíso).
 
-Estado (2026-11-04): están implementados los pasos 1-3 del pipeline acordado con la prof. Stéren Chabert:
-entrada → corrección de eddy y movimiento → tensor DTI. El atlas con ROIs dibujadas por los neurorradiólogos, el registro y
-el índice ALPS (pasos 4-6) vienen después.
-
 - Fases, herramientas y fuentes: [`docs/pipeline.md`](docs/pipeline.md).
 - Cada decisión metodológica, con su fuente y la alternativa descartada: [`docs/decisiones.md`](docs/decisiones.md).
 
 ## Qué hace
 
-1. **Entrada.** Recibe una carpeta o `.zip` con DICOM (se convierte con dcm2niix), o un NIfTI con su `.bval` y su `.bvec`.
-   Un NIfTI sin `.bval`/`.bvec` se rechaza, porque el NIfTI no guarda los valores b ni las direcciones. Con eso crea el
-   archivo fuente de DSI Studio (`dwi.sz`).
-2. **Eddy + movimiento.** DSI Studio llama a FSL eddy y recarga el DWI corregido con los bvecs rotados (`dwi_eddy.sz`).
-3. **Tensor DTI.** DSI Studio reconstruye el DTI y exporta FA, MD, Dxx, Dyy y Dzz a NIfTI.
+1. **Entrada.** Carpeta o `.zip` con DICOM (se convierte con dcm2niix), o un NIfTI con su `.bval` y su `.bvec`. Un NIfTI
+   sin `.bval`/`.bvec` se rechaza, porque el NIfTI no guarda los valores b ni las direcciones.
+2. **Eddy + movimiento.** Máscara con FSL `bet2` y corrección con FSL `eddy_cpu` (todos los núcleos).
+3. **FA del sujeto**, solo para guiar el registro.
+4. **Registro afín** del FA al atlas FSL HCP1065 de 1 mm (espacio MNI).
+5. **DWI al atlas.** Los 16 volúmenes pasan a la grilla del atlas y los bvecs se rotan igual.
+6. **Tensor en el atlas** con DSI Studio: Dxx, Dyy y Dzz quedan en los ejes del atlas.
+7. **Índice ALPS** en las 4 ROIs esféricas de Liu et al. 2024: `ALPS = mean(Dxx_proy, Dxx_asoc) / mean(Dyy_proy, Dzz_asoc)`
+   por hemisferio, y su promedio.
 
-Salidas por sujeto: `dti.fz.{fa,md,txx,tyy,tzz}.nii.gz`, `qc_dti.png` (cortes de FA y de Dxx/Dyy/Dzz en convención
-radiológica), los `.sz` intermedios, los archivos de eddy (`dwi.sz.corrected.eddy_*`, entre ellos el reporte de outliers y el
-movimiento) y `dsi_studio.log`, con cada comando ejecutado y su salida.
+Salidas por sujeto: `alps.csv`, `qc_alps.png` (ROIs sobre el color-FA del sujeto en el atlas), `qc_dti.png`, `qc_eddy.png`,
+`dti.fz.{fa,md,txx,tyy,tzz}.nii.gz` y `rois_atlas.nii.gz` en el atlas, `informe.md` (qué hizo cada paso y en qué fuente se
+basa), y `fsl.log` y `dsi_studio.log` con cada comando ejecutado.
 
-## Requisitos
+## Instalación (macOS o Linux)
 
-Linux o macOS. En Windows funciona dentro de WSL2 (Ubuntu), porque FSL no tiene versión nativa para Windows.
+Una sola vez, desde la carpeta del repositorio. No usa `sudo` y deja todo dentro de `herramientas/`:
 
-1. **Python 3.12 o superior** y las dependencias:
-   ```bash
-   python3 -m venv ~/venvs/alps
-   ```
-   ```bash
-   ~/venvs/alps/bin/pip install -r requirements.txt
-   ```
-2. **DSI Studio** (probado con la release 2026.7.25): https://dsi-studio.labsolver.org/download.html (licencia propia de
-   DSI Studio, uso académico). Indica el ejecutable en la variable `DTI_ALPS_DSI_STUDIO`, o déjalo en el `PATH` como
-   `dsi_studio`. En macOS también se busca en `/Applications/dsi_studio.app/Contents/MacOS/dsi_studio`.
-3. **FSL** (probado con 6.0.7.23; trae `eddy`): https://fsl.fmrib.ox.ac.uk/fsl/docs/install/ (licencia FSL, uso
-   no comercial). El instalador deja definida la variable `FSLDIR`.
+```bash
+bash app/instalar.sh
+```
+
+Instala micromamba, un entorno con Python 3.12 y las librerías de `requirements.txt`, **solo** los paquetes de FSL que
+se usan (`fsl-eddy`, `fsl-bet2`, `fsl-data_standard`, `fsl-data_atlases`; licencia FSL, uso no comercial) y DSI Studio
+2026.7.25 (licencia propia, uso académico). Descarga unos 700 MB. Al final verifica las herramientas y corre los tests.
+
+En Windows: dentro de WSL2 (Ubuntu), porque FSL no tiene versión nativa para Windows.
 
 ## Uso
 
-```bash
-~/venvs/alps/bin/python -m alps ruta/sub-01_dwi.nii.gz -o salidas/sub-01
-```
-
-Si el `.bval` y el `.bvec` no tienen el mismo nombre que el NIfTI, se indican con `--bval` y `--bvec`. La entrada también
-puede ser una carpeta DICOM o un `.zip` DICOM.
-
-### App local
-
-En Linux o macOS, desde la carpeta del repositorio:
+App: en macOS, doble clic en `app/abrir_app.command`, o desde la terminal:
 
 ```bash
-~/venvs/alps/bin/streamlit run app/app.py
+bash app/abrir_app.command
 ```
 
-En Windows con WSL, desde PowerShell (cambia la ruta del repositorio si está en otra carpeta):
+Se abre en el navegador (http://localhost:8501). Se sube el DWI (zip DICOM, o NIfTI + bval + bvec) o se escribe su ruta.
+Los resultados quedan en `resultados_app/<id>/` y se descargan desde la misma página. La opción "Sujeto ya procesado"
+abre un resultado anterior sin volver a procesar.
+
+Línea de comandos (después de `. herramientas/config.sh`):
 
 ```bash
-wsl -d Ubuntu -- bash -lc "cd '/mnt/c/Users/mirts/Desktop/DTI ALPS MRTS/dti-alps-atlas' && DTI_ALPS_DSI_STUDIO=~/herramientas/dsi_studio/dsi-studio-linux-universal-cpu/dsi_studio ~/venvs/alps/bin/streamlit run app/app.py --server.headless true"
+herramientas/entorno/bin/python -m alps ruta/sub-01_dwi.nii.gz -o salidas/sub-01
 ```
-
-Después se abre http://localhost:8501 en el navegador. Se puede subir el DWI (zip DICOM, o NIfTI + bval + bvec) o
-escribir su ruta; en WSL también se aceptan rutas de Windows (`C:\...`). Los resultados quedan en `resultados_app/<id>/`
-y se descargan desde la misma página.
-
-Un sujeto de ds001378 tarda unos 45 minutos, casi todo en eddy, que DSI Studio corre con un solo hilo.
 
 Pruebas:
 
 ```bash
-~/venvs/alps/bin/python -m pytest tests
+herramientas/entorno/bin/python -m pytest tests
 ```
 
 ## Limitaciones
 
-- Sin TOPUP: ds001378 no tiene una adquisición con codificación de fase inversa. Se asume fase AP (ver `docs/decisiones.md`).
-- DSI Studio llama a eddy con sus valores por defecto: sin reemplazo de outliers y sin slice-to-volume.
+- Sin TOPUP: ds001378 no tiene una adquisición con fase inversa. Fase y readout de eddy son un SUPUESTO (ver `docs/decisiones.md`).
+- Eddy con sus valores por defecto: sin reemplazo de outliers y sin slice-to-volume.
+- Registro solo afín. Las ROIs son las de referencia de Liu et al. 2024, no dibujadas por neurorradiólogos.
 
 ## Cita
 
