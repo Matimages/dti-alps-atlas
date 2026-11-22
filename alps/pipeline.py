@@ -1,14 +1,23 @@
-"""Pipeline, pasos 1-3 (reunión con la prof. Chabert, 2026-11-03): entrada -> eddy + movimiento -> tensor DTI.
+"""Pipeline completo (estructura acordada con la prof. Chabert, reuniones del 2026-11-03 y 2026-11-17).
 
-Los pasos 4-6 (atlas con ROIs dibujadas por los neurorradiólogos, registro y ALPS) quedan fuera hasta que se
-defina el atlas. El código anterior de esos pasos (registro.py, rois.py, indice.py, salida.py) se conserva, pero
-no se ejecuta. Lo usan la CLI (`python -m alps`) y la app Streamlit. Cada paso cita su fuente en su módulo.
+1 entrada → 2 eddy + movimiento → 3 FA del sujeto → 4 registro afín al atlas HCP1065 → 5 DWI al atlas con bvecs
+rotados → 6 tensor DTI en el atlas → 7 índice ALPS con las ROIs esféricas de Liu et al. 2024.
+El tensor se calcula después del registro (decisión de la prof. Chabert), para que Dxx, Dyy y Dzz queden en los ejes del
+atlas. Las ROIs las iban a dibujar los neurorradiólogos; como probablemente no será posible, se usan las de Liu como
+referencia. Lo usan la CLI (`python -m alps`) y la app Streamlit. Cada paso cita su fuente en su módulo.
 """
 import re
 import shutil
 from pathlib import Path
 
-from . import entrada, informe, preproceso, tensor
+import nibabel as nib
+import numpy as np
+
+from . import entrada, indice, informe, preproceso, registro, rois, salida, tensor
+
+RESTOS = ("dwi*.sz", "dwi_atlas*", "dti.fz*", "eddy*", "b0*", "acqparams.txt", "index.txt", "fa_sujeto*",
+          "registro_afin.txt", "rois_atlas.nii.gz", "alps.csv", "qc_*.png", "fsl.log", "dsi_studio.log", "informe.*",
+          "nifti", "dicom_*")
 
 
 def _id_desde_ruta(ruta):
@@ -17,35 +26,63 @@ def _id_desde_ruta(ruta):
     return re.sub(r"_dwi$", "", nombre)
 
 
-def ejecutar(ruta_entrada, carpeta_salida, bval=None, bvec=None, id_sujeto=None, avisar=print):
-    """Corre los pasos 1-3 y escribe todo en carpeta_salida.
-
-    Devuelve {archivos: {métrica, 'figura', 'figura_eddy' o 'informe': ruta}, versiones, pasos}
-    (pasos: ver alps/informe.py).
-    """
-    carpeta_salida = Path(carpeta_salida).resolve()
-    carpeta_salida.mkdir(parents=True, exist_ok=True)
-    id_sujeto = id_sujeto or _id_desde_ruta(ruta_entrada)
-    # Se borran los archivos de una corrida anterior: DSI Studio intenta reutilizar una corrección eddy previa
-    # (dwi.sz.corrected.*) y, si está incompleta, falla.
-    # También las carpetas nifti/ y dicom_*/ de un DICOM anterior: si no, dcm2niix agrega otra serie y el paso 1 falla.
-    for patron in ("dwi.sz*", "dwi_eddy.sz", "dti.fz*", "qc_*.png", "dsi_studio.log", "informe.*", "nifti", "dicom_*"):
-        for viejo in carpeta_salida.glob(patron):
+def _limpiar(carpeta):
+    """Borra los archivos de una corrida anterior en la carpeta (también nifti/ y dicom_*/ de un DICOM anterior)."""
+    for patron in RESTOS:
+        for viejo in carpeta.glob(patron):
             if viejo.is_dir():
                 shutil.rmtree(viejo)
             else:
                 viejo.unlink()
 
-    avisar("1/3 Leyendo el DWI y creando el archivo fuente de DSI Studio")
-    nifti, f_bval, f_bvec = entrada.resolver_entrada(ruta_entrada, carpeta_salida, bval, bvec)
-    src = entrada.crear_src(nifti, f_bval, f_bvec, carpeta_salida)
 
-    avisar("2/3 Corrección de corrientes de Foucault (eddy) y movimiento")
-    src = preproceso.corregir(src, carpeta_salida)
+def ejecutar(ruta_entrada, carpeta_salida, bval=None, bvec=None, id_sujeto=None, avisar=print):
+    """Corre los 7 pasos y escribe todo en carpeta_salida.
 
-    avisar("3/3 Reconstrucción DTI y exportación de los mapas")
-    archivos = tensor.reconstruir_dti(src, carpeta_salida)
-    archivos["figura"] = tensor.figura_qc(carpeta_salida, carpeta_salida / "qc_dti.png", titulo=id_sujeto)
-    archivos["figura_eddy"] = preproceso.figura_eddy(carpeta_salida, carpeta_salida / "qc_eddy.png", nifti)
-    archivos["informe"], versiones, pasos = informe.generar(carpeta_salida, nifti, f_bval)
-    return {"archivos": archivos, "versiones": versiones, "pasos": pasos}
+    Devuelve {archivos: {nombre: ruta}, fila: {id, medias, alps_L, alps_R, alps}, versiones, pasos}
+    (pasos: ver alps/informe.py).
+    """
+    c = Path(carpeta_salida).resolve()
+    c.mkdir(parents=True, exist_ok=True)
+    id_sujeto = id_sujeto or _id_desde_ruta(ruta_entrada)
+    _limpiar(c)
+
+    avisar("1/7 Leyendo el DWI y validando bval/bvec")
+    nifti, f_bval, f_bvec = entrada.resolver_entrada(ruta_entrada, c, bval, bvec)
+
+    avisar("2/7 Corrección de corrientes de Foucault y movimiento (FSL eddy)")
+    dwi_eddy, bvec_eddy, mascara = preproceso.corregir(nifti, f_bval, f_bvec, c)
+
+    avisar("3/7 FA del sujeto (para el registro)")
+    fa, affine_fa = registro.fa_nativo(dwi_eddy, f_bval, bvec_eddy, mascara)
+    nib.save(nib.Nifti1Image(fa.astype(np.float32), affine_fa), str(c / "fa_sujeto.nii.gz"))
+
+    avisar("4/7 Registro afín del FA al atlas HCP1065")
+    template, affine_t = registro.cargar_template()
+    mapa = registro.registrar(fa, affine_fa, template, affine_t)
+    np.savetxt(c / "registro_afin.txt", mapa.affine, fmt="%.6f")
+    nib.save(nib.Nifti1Image(mapa.transform(fa).astype(np.float32), affine_t), str(c / "fa_sujeto_en_atlas.nii.gz"))
+
+    avisar("5/7 DWI al atlas con los bvecs rotados")
+    dwi_atlas, bvec_atlas = registro.dwi_al_atlas(dwi_eddy, bvec_eddy, mapa, c / "dwi_atlas.nii.gz",
+                                                  c / "dwi_atlas.bvec")
+
+    avisar("6/7 Tensor DTI en el atlas (DSI Studio)")
+    mapas = tensor.reconstruir_dti(dwi_atlas, f_bval, bvec_atlas, c, affine_t, template.shape)
+
+    avisar("7/7 Índice ALPS en las ROIs y salidas")
+    esferas = rois.esferas(template.shape)
+    t = {m: nib.load(str(r)).get_fdata(dtype="float32") for m, r in mapas.items()}
+    medias = indice.medias_en_rois(t["txx"], t["tyy"], t["tzz"], esferas)
+    fila = {"id": id_sujeto, **medias, **indice.indice_alps(medias)}
+
+    archivos = {m: mapas[m] for m in tensor.METRICAS}
+    archivos["csv"] = c / "alps.csv"
+    archivos["rois"] = c / "rois_atlas.nii.gz"
+    salida.guardar_csv(fila, archivos["csv"])
+    salida.guardar_rois(esferas, affine_t, archivos["rois"])
+    archivos["figura_alps"] = salida.figura_qc(tensor.color_fa(t), esferas, fila, c / "qc_alps.png", titulo=id_sujeto)
+    archivos["figura"] = tensor.figura_qc(c, c / "qc_dti.png", titulo=id_sujeto)
+    archivos["figura_eddy"] = preproceso.figura_eddy(c, c / "qc_eddy.png", nifti)
+    archivos["informe"], versiones, pasos = informe.generar(c, nifti, f_bval, template, fila)
+    return {"archivos": archivos, "fila": fila, "versiones": versiones, "pasos": pasos}

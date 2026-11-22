@@ -3,38 +3,39 @@
 Diagrama vivo del proyecto: se actualiza cada vez que se implementa o cambia una fase.
 El detalle de cada decisión, con su alternativa descartada, está en [`decisiones.md`](decisiones.md).
 
- Pasos 1-3 implementados; pasos 4-6 pendientes.
+Pipeline completo (estructura acordada con la prof. Chabert, reuniones del 2026-11-03 y 2026-11-17). El tensor se
+calcula **después** del registro, para que Dxx, Dyy y Dzz queden en los ejes del atlas.
 
 ```mermaid
 flowchart TD
     A["DICOM (carpeta o .zip)"] -->|"dcm2niix<br/>rordenlab/dcm2niix"| B
     N["NIfTI + .bval + .bvec"] --> B
-    B["<b>1. Entrada</b><br/>alps/entrada.py<br/>valida bval/bvec → dsi_studio --action=src<br/>salida: dwi.sz"]
-    B --> C["<b>2. Eddy + movimiento</b><br/>alps/preproceso.py<br/>dsi_studio --action=rec --cmd=eddy → FSL eddy_cpu<br/>bvecs rotados por eddy<br/>salida: dwi_eddy.sz"]
-    C --> D["<b>3. Tensor DTI</b><br/>alps/tensor.py<br/>dsi_studio --action=rec --method=1 → --action=exp<br/>salida: FA, MD, Dxx, Dyy, Dzz (NIfTI) + qc_dti.png"]
-    D -.-> E["4. Atlas con ROIs dibujadas<br/>por los neurorradiólogos<br/>(pendiente)"]
-    E -.-> F["5. Registro al atlas<br/>por información mutua<br/>(pendiente)"]
-    F -.-> G["6. Índice ALPS<br/>(pendiente)"]
-    classDef pendiente stroke-dasharray: 5 5,color:#777
-    class E,F,G pendiente
+    B["<b>1. Entrada</b><br/>alps/entrada.py<br/>valida bval/bvec"]
+    B --> C["<b>2. Eddy + movimiento</b><br/>alps/preproceso.py<br/>FSL bet2 -m → eddy_cpu --nthr<br/>salida: eddy.nii.gz + bvecs rotados"]
+    C --> D["<b>3. FA del sujeto</b><br/>alps/registro.py<br/>DIPY TensorModel (OLS), solo para registrar"]
+    D --> E["<b>4. Registro afín al atlas</b><br/>alps/registro.py<br/>DIPY affine_registration → FA de FSL HCP1065 1 mm"]
+    E --> F["<b>5. DWI al atlas</b><br/>alps/registro.py<br/>16 volúmenes a la grilla de 1 mm + bvecs rotados"]
+    F --> G["<b>6. Tensor en el atlas</b><br/>alps/tensor.py<br/>dsi_studio --action=src → rec --method=1 → exp<br/>salida: FA, MD, Dxx, Dyy, Dzz"]
+    G --> H["<b>7. Índice ALPS</b><br/>alps/rois.py + alps/indice.py<br/>4 esferas de Liu (r = 2.5 mm)<br/>salida: alps.csv + qc_alps.png"]
 ```
 
-## Fases implementadas
+## Fases
 
-| Fase | Qué hace | Herramienta y versión | Fuente | Archivo del proyecto |
+| Fase | Qué hace | Herramienta | Fuente | Archivo |
 |---|---|---|---|---|
-| 1. Entrada | DICOM → NIfTI + .bval + .bvec | dcm2niix (paquete pip `dcm2niix`, versión en `requirements.txt`) | https://github.com/rordenlab/dcm2niix | `alps/entrada.py` |
-| 1. Entrada | Exige .bval y .bvec (el NIfTI no los guarda) y valida que coincidan con los volúmenes | Python | Formato FSL/BIDS de bval/bvec; DSI Studio solo advierte si faltan (verificado) | `alps/entrada.py` |
-| 1. Entrada | Crea el archivo fuente `dwi.sz` | DSI Studio 2026.7.25 `--action=src` |
-| 2. Eddy + movimiento | DSI Studio escribe el DWI en formato FSL, corre eddy (`--acqp 0 -1 0 0.05`, máscara U-Net, sin TOPUP) y recarga el DWI corregido con los bvecs rotados → `dwi_eddy.sz` | DSI Studio 2026.7.25 `--action=rec --cmd=eddy+save_src=…`; FSL 6.0.7.23 `eddy_cpu` | https://dsi-studio.labsolver.org/doc/cli_t2.html; código `run_eddy` / `load_topup_eddy_result` en https://github.com/frankyeh/DSI-Studio/blob/master/libs/dsi/image_model.cpp; https://fsl.fmrib.ox.ac.uk/fsl/docs/diffusion/eddy/users_guide/index.html; Marín et al. 2025 | `alps/preproceso.py` |
-| 3. Tensor DTI | Ajuste del tensor y mapas FA, MD, txx/tyy/tzz | DSI Studio 2026.7.25 `--action=rec --method=1 --other_output=md,tensor` | https://dsi-studio.labsolver.org/doc/cli_t2.html | `alps/tensor.py` |
-| 3. Tensor DTI | Exporta los mapas a NIfTI | DSI Studio `--action=exp --export=fa,md,txx,tyy,tzz` | https://dsi-studio.labsolver.org/doc/cli_exp.html | `alps/tensor.py` |
+| 1. Entrada | DICOM → NIfTI + .bval + .bvec; exige bval/bvec (el NIfTI no los guarda) y valida que coincidan | dcm2niix; Python | https://github.com/rordenlab/dcm2niix; DSI Studio solo advierte si faltan (verificado) | `alps/entrada.py` |
+| 2. Eddy + movimiento | Máscara `bet2 -m` del b0; `eddy_cpu` con los parámetros que usaba DSI Studio más `--nthr`; `--acqp 0 1 0 0.1` (SUPUESTO) | FSL `bet2`, `eddy_cpu` | https://fsl.fmrib.ox.ac.uk/fsl/docs/diffusion/eddy/users_guide/index.html; gbarisano/alps (alps.sh); Marín et al. 2025 | `alps/preproceso.py` |
+| 3. FA del sujeto | Tensor OLS solo para tener el FA que guía el registro | DIPY `TensorModel` | alps.sh (registra el FA de dtifit) | `alps/registro.py` |
+| 4. Registro | Afín 12 gdl, información mutua, FA sujeto → FA de FSL HCP1065 1 mm (grilla MNI) | DIPY `affine_registration` | Liu et al. 2024; alps.sh (`flirt -dof 12`); tutorial de DIPY | `alps/registro.py` |
+| 5. DWI al atlas | Cada volumen a la grilla del atlas (lineal); bvecs rotados con la parte rotacional (polar) de la matriz | DIPY `AffineMap`; NumPy | Leemans & Jones 2009; Alexander et al. 2001; convención de bvecs FSL (MRtrix3) | `alps/registro.py` |
+| 6. Tensor en el atlas | DTI sobre el DWI en el atlas, sin remuestrear (`--make_isotropic=0`); exporta FA, MD, txx, tyy, tzz | DSI Studio 2026.7.25 | https://dsi-studio.labsolver.org/doc/cli_t2.html; cli_exp.html; Marín et al. 2025 | `alps/tensor.py` |
+| 7. ALPS | Medias de Dxx, Dyy, Dzz en las esferas de Liu; ALPS por hemisferio y promedio | NumPy | Taoka et al. 2017; Liu et al. 2024; gbarisano/alps | `alps/rois.py`, `alps/indice.py` |
 
-Todas las llamadas a DSI Studio pasan por `alps/dsi_studio.py`, que deja el comando exacto y su salida en `dsi_studio.log`,
-dentro de la carpeta de cada sujeto.
+Cada sujeto deja `fsl.log` y `dsi_studio.log` con el comando exacto de cada llamada, e `informe.md` con el detalle de
+cada paso (también se ve en la app).
 
-## Plataforma
+## Plataforma e instalación
 
-DSI Studio corre nativo en Linux, macOS y Windows. FSL corre en Linux y macOS, y en Windows solo dentro de WSL
-. Por eso el desarrollo se hace en WSL2 Ubuntu.
-
+Corre en macOS (Apple Silicon o Intel) y Linux; en Windows, dentro de WSL2. `app/instalar.sh` instala lo mínimo en
+`herramientas/`: micromamba, un entorno con Python y solo los paquetes de FSL que se usan (`fsl-eddy`, `fsl-bet2`,
+`fsl-data_standard`, `fsl-data_atlases`) y DSI Studio. `app/abrir_app.command` abre la app.

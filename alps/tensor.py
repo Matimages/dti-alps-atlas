@@ -1,8 +1,12 @@
-"""Paso 3: reconstrucción DTI con DSI Studio y exportación de los mapas a NIfTI.
+"""Paso 6: tensor DTI con DSI Studio sobre el DWI ya llevado al atlas, y exportación de los mapas a NIfTI.
 
-- `dsi_studio --action=rec --method=1` (1 = DTI; https://dsi-studio.labsolver.org/doc/cli_t2.html), con el tensor
-  como salida adicional. Así lo hacen Marín et al. 2025 y la tesis previa, que piden "tensor" para obtener txx, tyy y tzz.
-  Los demás parámetros (máscara, remuestreo, etc.) quedan en los defaults de DSI Studio; se registran en dsi_studio.log.
+- `dsi_studio --action=src` con el DWI en el atlas y los bvecs rotados (paso 5), y luego `--action=rec --method=1`
+  (1 = DTI; https://dsi-studio.labsolver.org/doc/cli_t2.html), con el tensor como salida adicional. Así lo hacen
+  Marín et al. 2025 y la tesis previa, que piden "tensor" para obtener txx, tyy y tzz. `--make_isotropic=0` para que
+  DSI Studio no remuestree: los mapas tienen que quedar en la grilla de 1 mm del atlas, donde están las ROIs. El resto
+  queda en los defaults de DSI Studio; se registra en dsi_studio.log.
+- Los mapas exportados se reordenan a la orientación del atlas con nibabel (DSI Studio puede exportar en LPS) y se
+  verifica que la grilla resultante sea la del atlas.
 - `dsi_studio --action=exp --export=fa,md,txx,tyy,tzz` (https://dsi-studio.labsolver.org/doc/cli_exp.html):
   cada mapa queda en <archivo .fz>.<métrica>.nii.gz.
 - txx, tyy y tzz son Dxx, Dyy y Dzz, los elementos diagonales del tensor en los ejes de la imagen. Son las mismas filas que
@@ -12,6 +16,7 @@
   verde = antero-posterior, azul = cráneo-caudal. Es la codificación con la que los neurorradiólogos ubican las fibras
   de proyección (azul) y de asociación (verde) (Marín et al. 2025). Solo se usa para mirar; no entra en ningún cálculo.
 """
+import shutil
 from pathlib import Path
 
 import matplotlib
@@ -21,19 +26,39 @@ import matplotlib.pyplot as plt
 import nibabel as nib
 import numpy as np
 
-from . import dsi_studio
+from . import dsi_studio, entrada
 
 METRICAS = ("fa", "md", "txx", "tyy", "tzz")
 FUERA_DIAGONAL = ("txy", "txz", "tyz")  # solo para el color-FA de la figura QC
 
 
-def reconstruir_dti(src, carpeta):
-    """Reconstruye el DTI desde el .sz y exporta los mapas. Devuelve {métrica: ruta NIfTI} (las de METRICAS)."""
-    fz = Path(carpeta) / "dti.fz"
-    dsi_studio.correr("rec", carpeta, source=Path(src).resolve(), method=1, other_output="md,tensor",
-                      output=fz.name, overwrite=1)
-    dsi_studio.correr("exp", carpeta, source=fz.name, export=",".join(METRICAS + FUERA_DIAGONAL))
-    return {m: Path(carpeta) / f"{fz.name}.{m}.nii.gz" for m in METRICAS}
+def reconstruir_dti(nifti, bval, bvec, carpeta, affine_atlas, forma_atlas):
+    """Tensor con DSI Studio y mapas en la grilla del atlas. Devuelve {métrica: ruta NIfTI} (METRICAS y FUERA_DIAGONAL)."""
+    c = Path(carpeta)
+    # DSI Studio busca el .bval y el .bvec con el mismo nombre del NIfTI y avisa si no están, aunque se le pasen.
+    base = entrada._quitar_ext(Path(nifti))
+    for origen, ext in ((bval, ".bval"), (bvec, ".bvec")):
+        if Path(origen).resolve() != base.with_suffix(ext).resolve():
+            shutil.copyfile(origen, base.with_suffix(ext))
+    entrada.crear_src(nifti, base.with_suffix(".bval"), base.with_suffix(".bvec"), c, nombre="dwi_atlas.sz")
+    fz = c / "dti.fz"
+    dsi_studio.correr("rec", c, source=(c / "dwi_atlas.sz").resolve(), method=1, other_output="md,tensor",
+                      make_isotropic=0, output=fz.name, overwrite=1)
+    dsi_studio.correr("exp", c, source=fz.name, export=",".join(METRICAS + FUERA_DIAGONAL))
+    rutas = {m: c / f"{fz.name}.{m}.nii.gz" for m in METRICAS + FUERA_DIAGONAL}
+    for ruta in rutas.values():
+        a_grilla(ruta, affine_atlas, forma_atlas)
+    return rutas
+
+
+def a_grilla(ruta, affine, forma):
+    """Reordena un NIfTI exportado por DSI Studio a la orientación de la grilla dada y lo reescribe."""
+    img = nib.load(str(ruta))
+    cambio = nib.orientations.ornt_transform(nib.io_orientation(img.affine), nib.io_orientation(affine))
+    img = img.as_reoriented(cambio)
+    if img.shape[:3] != tuple(forma) or not np.allclose(img.affine, affine, atol=1e-3):
+        raise ValueError(f"{Path(ruta).name} no quedó en la grilla del atlas: {img.shape}, {np.round(img.affine, 3)}")
+    nib.save(nib.Nifti1Image(np.asarray(img.dataobj, dtype=np.float32), affine), str(ruta))
 
 
 def color_fa(t):

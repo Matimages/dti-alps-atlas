@@ -1,12 +1,12 @@
-"""Etapa 5b: salidas (CSV, NIfTI y figura QC).
+"""Paso 7b: salidas (CSV, NIfTI de ROIs y figura QC).
 
 - CSV: mismas columnas que alps.stat/alps.csv de gbarisano/alps, sin `scanner` (no está disponible
   cuando la entrada es NIfTI). Difusividades en mm²/s.
-- NIfTI, en el espacio del template: ROIs en un solo archivo con etiquetas 1-4 (orden de alps.sh: L-SCR, R-SCR,
-  L-SLF, R-SLF) y FA registrado, para revisar el registro en un visor.
-- Figura QC: corte axial k = 99 (altura de las ROIs) del color-FA llevado al template, con los contornos
+- NIfTI, en el espacio del atlas: ROIs en un solo archivo con etiquetas 1-4 (orden de alps.sh: L-SCR, R-SCR,
+  L-SLF, R-SLF).
+- Figura QC: corte axial k = 99 (altura de las ROIs) del color-FA del sujeto en el atlas, con los contornos
   de las ROIs. Convención radiológica: la derecha del paciente queda a la izquierda de la imagen. En la grilla
-  JHU, i = 0 es x = +90 mm (derecha), así que basta con dibujar i creciendo hacia la derecha.
+  MNI de 1 mm, i = 0 es x = +90 mm (derecha), así que basta con dibujar i creciendo hacia la derecha.
 """
 import csv
 
@@ -30,12 +30,12 @@ def guardar_csv(fila, ruta):
         w.writerow({c: fila[c] for c in COLUMNAS})
 
 
-def guardar_nifti(rois, fa_template, affine, ruta_rois, ruta_fa):
-    etiquetas = np.zeros(fa_template.shape, dtype=np.uint8)
+def guardar_rois(rois, affine, ruta):
+    """ROIs en un solo NIfTI con etiquetas 1-4 (orden de alps.sh: L-SCR, R-SCR, L-SLF, R-SLF)."""
+    etiquetas = np.zeros(next(iter(rois.values())).shape, dtype=np.uint8)
     for nombre, valor in ETIQUETAS.items():
         etiquetas[rois[nombre]] = valor
-    nib.save(nib.Nifti1Image(etiquetas, affine), str(ruta_rois))
-    nib.save(nib.Nifti1Image(fa_template.astype(np.float32), affine), str(ruta_fa))
+    nib.save(nib.Nifti1Image(etiquetas, affine), str(ruta))
 
 
 def figura_qc(color_fa_template, rois, resultado, ruta, titulo="", k=99):
@@ -56,8 +56,9 @@ def figura_qc(color_fa_template, rois, resultado, ruta, titulo="", k=99):
         ci, cj, _ = np.argwhere(m).mean(axis=0)
         ejes[1].text(ci, cj + 4, nombre.replace("_", "-"), color=COLORES[nombre], ha="center", fontsize=9)
     fig.suptitle(f"{titulo}  ALPS L = {resultado['alps_L']:.3f}   R = {resultado['alps_R']:.3f}   "
-                 f"media = {resultado['alps']:.3f}\nColor-FA en JHU-ICBM-FA 1 mm, corte axial z = {k - 72} mm "
+                 f"media = {resultado['alps']:.3f}\nColor-FA del sujeto en el atlas (MNI 1 mm), corte axial z = {k - 72} mm "
                  f"(convención radiológica). Blanco: proyección (SCR). Amarillo: asociación (SLF).")
     fig.tight_layout()
     fig.savefig(ruta, dpi=110)
     plt.close(fig)
+    return ruta

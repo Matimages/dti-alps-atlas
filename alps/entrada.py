@@ -1,4 +1,4 @@
-"""Paso 1: entrada del DWI y creación del archivo fuente de DSI Studio (.sz).
+"""Paso 1: entrada del DWI (y, para el paso 6, creación del archivo fuente .sz de DSI Studio).
 
 Acepta:
 - carpeta con DICOM o .zip con DICOM: se convierte a NIfTI + .bval + .bvec con dcm2niix (C. Rorden,
@@ -9,8 +9,9 @@ Acepta:
   Sin ellos no se puede calcular el tensor, así que se detiene con error. No basta con avisar: DSI Studio solo advierte
   y crea el .sz igual (verificado con la release 2026.7.25).
 
-Después, `dsi_studio --action=src --source=<nifti> --bval=<bval> --bvec=<bvec>` crea el .sz
-(https://dsi-studio.labsolver.org/doc/cli_t1.html). Es el mismo primer paso de Marín et al. 2025 y de la tesis (archivo SRC).
+`crear_src` (`dsi_studio --action=src --source=<nifti> --bval=<bval> --bvec=<bvec>`;
+https://dsi-studio.labsolver.org/doc/cli_t1.html) crea el archivo SRC, como Marín et al. 2025 y la tesis. Desde el
+2026-11-22 se usa en el paso 6, con el DWI ya llevado al atlas.
 """
 import tempfile
 import zipfile
@@ -90,9 +91,9 @@ def validar(nifti, bval, bvec):
         raise ValueError("No hay ningún volumen b0 (b < 50 s/mm²).")
 
 
-def crear_src(nifti, bval, bvec, carpeta):
-    """Crea <carpeta>/dwi.sz con DSI Studio y devuelve su ruta."""
-    salida = Path(carpeta) / "dwi.sz"
+def crear_src(nifti, bval, bvec, carpeta, nombre="dwi.sz"):
+    """Crea <carpeta>/<nombre> (archivo fuente .sz) con DSI Studio y devuelve su ruta."""
+    salida = Path(carpeta) / nombre
     dsi_studio.correr("src", carpeta, source=Path(nifti).resolve(), bval=Path(bval).resolve(),
                       bvec=Path(bvec).resolve(), output=salida.name, overwrite=1)
     return salida

@@ -1,31 +1,27 @@
-"""Paso 2: corrección de corrientes de Foucault (eddy) y de movimiento con FSL eddy, llamado desde DSI Studio.
+"""Paso 2: corrección de corrientes de Foucault (eddy) y de movimiento con FSL eddy, llamado directamente.
 
 Reemplaza al denoising MP-PCA y a la corrección de Gibbs. Lo pidió la prof. Chabert en la reunión del 2026-11-03:
-a 1.5T la relación señal-ruido es más baja que a 3T, donde se validó Liu et al. 2024, y el denoising podría
-eliminar información. Marín et al. 2025 hicieron esta misma corrección con DSI Studio + EDDY.
+a 1.5T la relación señal-ruido es más baja que a 3T, donde se validó Liu et al. 2024, y el denoising podría eliminar
+información. Marín et al. 2025 hicieron esta corrección con DSI Studio + EDDY.
 
-- `dsi_studio --action=rec --cmd=eddy+save_src=<salida>` (https://dsi-studio.labsolver.org/doc/cli_t2.html):
-  DSI Studio escribe el DWI y los gradientes en el formato de FSL, corre `eddy` y recarga el DWI corregido junto con
-  los bvecs rotados (`.eddy_rotated_bvecs`), y guarda un nuevo .sz. Fuente: libs/dsi/image_model.cpp de
-  github.com/frankyeh/DSI-Studio (funciones run_eddy y load_topup_eddy_result).
-- FSL eddy (Andersson & Sotiropoulos 2016; https://fsl.fmrib.ox.ac.uk/fsl/docs/diffusion/eddy/users_guide/index.html),
-  FSL 6.0.7.23. Requiere FSL instalado y la variable FSLDIR (Linux o macOS; en Windows, solo vía WSL).
-- Sin imagen con codificación de fase inversa no hay TOPUP. DSI Studio pasa a eddy `--acqp` = "0 -1 0 0.05"
-  (fase antero-posterior, readout 0.05 s) y la máscara de su U-Net. SUPUESTO: la fase es AP. ds001378 no trae el JSON
-  que lo diría. Según el FAQ de eddy, un readout de 0.05 s sirve si no se conoce.
-- Argumentos fijos de DSI Studio: --data_is_shelled --verbose. Por lo tanto quedan los defaults de eddy:
-  --slm=none, --repol=False (no reemplaza cortes outlier), sin slice-to-volume (--mporder=0) y --nthr=1 (un solo hilo;
-  ~45 min por sujeto). La guía de eddy recomienda considerar `--slm=linear` cuando hay pocas direcciones (aquí 15).
-  Verificado en <sujeto>/dwi.sz.corrected.eddy_values_of_all_input_parameters.
-- Figura QC (qc_eddy.png): muestra el DWI original y la salida de eddy (dwi.sz.corrected.nii.gz) en el mismo volumen y
-  corte, junto con su diferencia. DSI Studio borra el NIfTI intermedio que le pasó a eddy; se usa el original, que tiene
-  los mismos datos, y ambos se llevan a orientación RAS con nibabel antes de compararlos. Se elige el corte outlier más
-  extremo del reporte de eddy (`.eddy_outlier_report`) o, si no hay outliers, el volumen con más movimiento
-  (`.eddy_movement_rms`).
+Desde el 2026-11-22 eddy se llama directamente y no a través de DSI Studio. DSI Studio lo corría con un solo hilo
+(~45 min por sujeto) y no permitía cambiar nada. Se usan los mismos parámetros que usaba DSI Studio (verificado en
+`.eddy_values_of_all_input_parameters`) y solo se agrega `--nthr` con todos los núcleos: mismo algoritmo, más rápido.
+- Máscara: `bet2 b0 b0_brain -m` sobre el primer b0, como gbarisano/alps (alps.sh) antes de eddy.
+- `--acqp`: sin un JSON que diga la fase, alps.sh usa para Philips el eje de fase y un readout de 0.1 s.
+  SUPUESTO: fase en el eje y (antero-posterior), "0 1 0 0.1". Sin TOPUP el valor del readout no cambia el resultado
+  (FAQ de eddy). `--index`: un 1 por volumen.
+- `eddy_cpu --data_is_shelled --nthr=<núcleos>`; el resto en los defaults de eddy (--repol=False, --slm=none,
+  --mporder=0). Guía: https://fsl.fmrib.ox.ac.uk/fsl/docs/diffusion/eddy/users_guide/index.html.
+  Andersson & Sotiropoulos 2016, NeuroImage 125:1063-78.
+- Salidas: eddy.nii.gz (DWI corregido) y eddy.eddy_rotated_bvecs (bvecs rotados por el movimiento estimado; FAQ de eddy).
+- Figura QC (qc_eddy.png): DWI original y corregido, y su diferencia, en el corte outlier más extremo del reporte de eddy
+  (`.eddy_outlier_report`) o, si no hay outliers, en el volumen con más movimiento (`.eddy_movement_rms`).
 """
 import os
 import re
 import shutil
+import subprocess
 from pathlib import Path
 
 import matplotlib
@@ -35,42 +31,55 @@ import matplotlib.pyplot as plt
 import nibabel as nib
 import numpy as np
 
-from . import dsi_studio
+ACQP = "0 1 0 0.1"
 
 
-def corregir(src, carpeta):
-    """Corre eddy sobre el .sz y devuelve la ruta del .sz corregido (dwi_eddy.sz)."""
-    if not (os.environ.get("FSLDIR") or shutil.which("eddy")):
-        raise FileNotFoundError("No se encontró FSL (eddy): instálalo (https://fsl.fmrib.ox.ac.uk/fsl/docs/install/) "
-                                "y deja definida la variable FSLDIR.")
-    salida = Path(carpeta) / "dwi_eddy.sz"
-    # --action=rec siempre termina reconstruyendo: se pide DTI (lo más rápido) y ese .fz se descarta,
-    # porque el tensor se calcula en el paso 3 a partir de dwi_eddy.sz.
-    descarte = Path(carpeta) / "descartar.fz"
-    dsi_studio.correr("rec", carpeta, source=Path(src).resolve(), cmd=f"eddy+save_src={salida.name}",
-                      method=1, output=descarte.name, overwrite=1)
-    descarte.unlink(missing_ok=True)
-    if not salida.exists():
-        raise RuntimeError("DSI Studio terminó sin escribir el DWI corregido; revisa dsi_studio.log.")
-    return salida
+def _fsl(programa):
+    for candidato in (Path(os.environ.get("FSLDIR", "")) / "bin" / programa, shutil.which(programa)):
+        if candidato and Path(candidato).exists():
+            return str(candidato)
+    raise FileNotFoundError(f"No se encontró {programa} de FSL: instálalo (ver README) y deja definida FSLDIR.")
+
+
+def correr_fsl(comando, carpeta):
+    """Corre un programa de FSL en `carpeta`, deja el comando y su salida en fsl.log y falla si termina con error."""
+    entorno = {**os.environ, "FSLOUTPUTTYPE": "NIFTI_GZ"}
+    r = subprocess.run(comando, cwd=carpeta, env=entorno, capture_output=True, text=True, errors="replace")
+    with open(Path(carpeta) / "fsl.log", "a", encoding="utf-8") as f:
+        f.write("$ " + " ".join(map(str, comando)) + "\n" + r.stdout + r.stderr + "\n")
+    if r.returncode != 0:
+        raise RuntimeError(f"{Path(comando[0]).name} falló (código {r.returncode}): {(r.stdout + r.stderr)[-500:]}")
+
+
+def corregir(nifti, bval, bvec, carpeta):
+    """Máscara con bet2 y eddy. Devuelve (DWI corregido, bvecs rotados, máscara)."""
+    c = Path(carpeta)
+    img = nib.load(str(nifti))
+    b0 = int(np.argmin(np.loadtxt(bval, ndmin=1)))  # primer volumen con el b más bajo (el b0)
+    nib.save(nib.Nifti1Image(np.asarray(img.dataobj[..., b0], dtype=np.float32), img.affine), str(c / "b0.nii.gz"))
+    correr_fsl([_fsl("bet2"), "b0", "b0_brain", "-m"], c)
+    (c / "acqparams.txt").write_text(ACQP + "\n")
+    (c / "index.txt").write_text(" ".join(["1"] * img.shape[3]) + "\n")
+    correr_fsl([_fsl("eddy_cpu"), f"--imain={Path(nifti).resolve()}", "--mask=b0_brain_mask", "--acqp=acqparams.txt",
+                "--index=index.txt", f"--bvecs={Path(bvec).resolve()}", f"--bvals={Path(bval).resolve()}",
+                "--out=eddy", "--data_is_shelled", f"--nthr={os.cpu_count() or 1}"], c)
+    return c / "eddy.nii.gz", c / "eddy.eddy_rotated_bvecs", c / "b0_brain_mask.nii.gz"
 
 
 def figura_eddy(carpeta, ruta, original):
     """DWI original y corregido por eddy, y su diferencia, en un mismo volumen y corte. Devuelve la ruta."""
     c = Path(carpeta)
-    corregido = nib.load(str(c / "dwi.sz.corrected.nii.gz"))
     antes = nib.as_closest_canonical(nib.load(str(original)))  # RAS
+    corregido = nib.load(str(c / "eddy.nii.gz"))
     despues = nib.as_closest_canonical(corregido)
-    if antes.shape != despues.shape:
-        raise ValueError(f"El DWI original {antes.shape} y el corregido {despues.shape} no tienen la misma grilla.")
-    reporte = (c / "dwi.sz.corrected.eddy_outlier_report").read_text()
+    reporte = (c / "eddy.eddy_outlier_report").read_text()
     outliers = [(abs(float(m[3])), int(m[1]), int(m[2]), float(m[3]))
                 for m in re.finditer(r"Slice (\d+) in scan (\d+) .*?mean (\S+) standard", reporte)]
     if outliers:
         _, k, v, de = max(outliers)
         motivo = f"Corte outlier más extremo según eddy ({de:.1f} DE; no se reemplaza)"
     else:
-        v = int(np.loadtxt(c / "dwi.sz.corrected.eddy_movement_rms")[:, 0].argmax())
+        v = int(np.loadtxt(c / "eddy.eddy_movement_rms")[:, 0].argmax())
         k = antes.shape[2] // 2
         motivo = "Volumen con más movimiento, corte central"
     k_ras = antes.shape[2] - 1 - k if nib.aff2axcodes(corregido.affine)[2] == "I" else k  # índice de eddy → RAS

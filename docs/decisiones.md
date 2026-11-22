@@ -18,6 +18,26 @@ Fuentes:
   (github.com/frankyeh/DSI-Studio, `libs/dsi/image_model.cpp`).
 - **[eddy]** FSL eddy (Andersson & Sotiropoulos, NeuroImage 2016), FSL 6.0.7.23. Guía de uso y FAQ en
   https://fsl.fmrib.ox.ac.uk/fsl/docs/diffusion/eddy/.
+- **[Reunión 2]** Reunión del autor con la prof. Chabert, 2026-11-17.
+
+## Pipeline completo (2026-11-22)
+
+Reemplaza a las secciones siguientes donde se contradigan. Pasos: 1 entrada → 2 eddy → 3 FA del sujeto → 4 registro al
+atlas → 5 DWI al atlas → 6 tensor en el atlas → 7 ALPS. Diagrama: [`pipeline.md`](pipeline.md).
+
+| Decisión | Fuente | Alternativa descartada |
+|---|---|---|
+| Atlas: FSL HCP1065 1 mm (FA para registrar; misma grilla MNI que JHU) | [Reunión 2]: a la profesora le gustó la figura en color-FA con las ROIs de Liu | JHU-ICBM-FA (template de [Liu]; solo FA) |
+| ROIs: las esferas de [Liu] (r = 2.5 mm, R-SLF en i = 52) como ROIs de referencia | [Reunión 2]: probablemente no habrá reunión con los neurorradiólogos | ROIs dibujadas por los neurorradiólogos sobre el atlas (pendiente si se logra) |
+| Orden: registrar el DWI y después calcular el tensor (Dxx, Dyy, Dzz en los ejes del atlas) | [Reunión 2] (decisión de la profesora; el autor confirmó la interpretación el 2026-11-22) | Tensor en el sujeto y mapas llevados al template sin reorientar ([alps.sh]) |
+| Eddy llamado directamente (`eddy_cpu`), con los mismos parámetros que usaba DSI Studio más `--nthr` = núcleos | [eddy] guía (`--nthr`); DSI Studio lo corría con 1 hilo (~45 min). La profesora reporta ~15 min en su equipo | Seguir vía DSI Studio (no permite cambiar parámetros) |
+| Máscara para eddy: `bet2 b0 b0_brain -m` sobre el primer b0 | [alps.sh] | U-Net de DSI Studio |
+| **SUPUESTO** `--acqp 0 1 0 0.1`: fase en y, readout 0.1 s | [alps.sh] para Philips usa el eje de fase y 0.1 s; ds001378 no trae JSON. Sin TOPUP, el readout no cambia el resultado ([eddy] FAQ) | `0 -1 0 0.05` (lo que fijaba DSI Studio) |
+| FA del sujeto para el registro: DIPY `TensorModel` OLS dentro de la máscara de bet2 | [alps.sh] registra el FA de dtifit (OLS) | — |
+| Registro afín 12 gdl con DIPY (información mutua) al FA del HCP1065 | [Liu]; [alps.sh] `flirt -dof 12`; **SUPUESTO**: parámetros del tutorial de [DIPY] | Registro no lineal |
+| Bvecs rotados con la parte rotacional (descomposición polar) de la matriz afín | Leemans & Jones 2009 (Magn Reson Med 61:1336-49); Alexander et al. 2001 (IEEE TMI 20:1131-9); convención FSL según la documentación de MRtrix3. Verificado con `tests/test_registro.py` | No rotar los bvecs |
+| Tensor en el atlas con DSI Studio, `--make_isotropic=0` (los mapas quedan en la grilla de 1 mm de las ROIs) | [DSI] cli_t2; [Marín] | DIPY |
+| Instalación mínima: micromamba + paquetes `fsl-eddy`, `fsl-bet2`, `fsl-data_standard`, `fsl-data_atlases` del canal conda de FSL + DSI Studio (`app/instalar.sh`) | [Reunión 2]: que corra en el Mac de la profesora con la menor cantidad de módulos | FSL completo (varios GB) |
 
 ## Pasos 1-3 (reestructuración del 2026-11-03)
 
