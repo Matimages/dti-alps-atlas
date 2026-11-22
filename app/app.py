@@ -16,8 +16,9 @@ from alps import atlas, informe, tensor  # noqa: E402
 from alps.pipeline import _id_desde_ruta, ejecutar  # noqa: E402
 
 RESULTADOS = RAIZ / "resultados_app"
-NOMBRES = {"fa": "FA", "md": "MD", "txx": "Dxx (txx)", "tyy": "Dyy (tyy)", "tzz": "Dzz (tzz)",
-           "figura": "Figura QC", "figura_eddy": "Figura eddy", "informe": "Informe (.md)"}
+NOMBRES = {"csv": "ALPS (.csv)", "informe": "Informe (.md)", "figura_alps": "Figura ALPS", "figura": "Figura DTI",
+           "figura_eddy": "Figura eddy", "rois": "ROIs (NIfTI)", "fa": "FA", "md": "MD", "txx": "Dxx (txx)",
+           "tyy": "Dyy (tyy)", "tzz": "Dzz (tzz)"}
 
 
 def _ruta_local(texto):
@@ -30,9 +31,9 @@ def _ruta_local(texto):
 
 
 def _archivos(carpeta):
-    rutas = {m: carpeta / f"dti.fz.{m}.nii.gz" for m in tensor.METRICAS}
-    rutas = {**rutas, "figura": carpeta / "qc_dti.png", "figura_eddy": carpeta / "qc_eddy.png",
-             "informe": carpeta / "informe.md"}
+    rutas = {"csv": carpeta / "alps.csv", "informe": carpeta / "informe.md", "figura_alps": carpeta / "qc_alps.png",
+             "figura": carpeta / "qc_dti.png", "figura_eddy": carpeta / "qc_eddy.png",
+             "rois": carpeta / "rois_atlas.nii.gz", **{m: carpeta / f"dti.fz.{m}.nii.gz" for m in tensor.METRICAS}}
     return {nombre: ruta for nombre, ruta in rutas.items() if ruta.exists()}
 
 
@@ -47,16 +48,22 @@ def _mostrar_paso(paso, carpeta):
         st.dataframe(paso["tabla"], hide_index=True, width="stretch")
     for nota in paso["notas"]:
         (st.warning if "SUPUESTO" in nota or "outlier" in nota else st.info)(nota)
-    with st.expander("Comandos ejecutados (copiados del log)"):
-        st.code("\n\n".join(paso["comandos"]), language="bash", wrap_lines=True)
+    if paso["comandos"]:
+        with st.expander("Comandos ejecutados (copiados del log)"):
+            st.code("\n\n".join(paso["comandos"]), language="bash", wrap_lines=True)
     st.markdown("**Documentación en que se basa**")
     st.markdown("\n".join(f"- [{texto}]({url})" if url else f"- {texto}" for texto, url in paso["fuentes"]))
 
 
-def _mostrar_resultado(carpeta, versiones, pasos):
+def _mostrar_resultado(carpeta, versiones, pasos, fila=None):
     rutas = _archivos(carpeta)
     st.subheader(f"Resultado: {carpeta.name}")
-    st.image(str(rutas["figura"]))
+    if fila:
+        c1, c2, c3 = st.columns(3)
+        c1.metric("ALPS izquierdo", f"{fila['alps_L']:.3f}")
+        c2.metric("ALPS derecho", f"{fila['alps_R']:.3f}")
+        c3.metric("ALPS (promedio)", f"{fila['alps']:.3f}")
+    st.image(str(rutas.get("figura_alps", rutas.get("figura"))))
     st.subheader("Detalle del procesamiento")
     st.caption("Qué hizo cada paso, con qué parámetros y en qué documentación se basa. Versiones: "
                + " · ".join(f"{k} {v}" for k, v in versiones.items()))
@@ -65,16 +72,18 @@ def _mostrar_resultado(carpeta, versiones, pasos):
             _mostrar_paso(paso, carpeta)
     st.subheader("Descargas")
     st.caption(f"Carpeta: {carpeta}")
-    for col, (nombre, ruta) in zip(st.columns(len(rutas)), rutas.items()):
-        col.download_button(NOMBRES[nombre], ruta.read_bytes(), ruta.name, width="stretch")
+    lista = list(rutas.items())
+    for i in range(0, len(lista), 6):  # filas de hasta 6 botones
+        for col, (nombre, ruta) in zip(st.columns(6), lista[i:i + 6]):
+            col.download_button(NOMBRES[nombre], ruta.read_bytes(), ruta.name, width="stretch")
 
 
 st.set_page_config(page_title="DTI-ALPS con atlas", layout="wide")
-st.title("DTI-ALPS con atlas estándar · pasos 1-3")
-st.caption("Implementado: entrada, corrección de eddy y movimiento, y tensor DTI, con DSI Studio y FSL eddy "
-           "(como Marín et al. 2025). Pendiente: el atlas con las ROIs, el registro y el índice ALPS.")
+st.title("Índice DTI-ALPS con atlas estándar")
+st.caption("Entrada → corrección de eddy y movimiento (FSL eddy) → registro afín al atlas HCP1065 → tensor DTI en el "
+           "atlas (DSI Studio) → índice ALPS en las ROIs de referencia de Liu et al. 2024.")
 
-procesar, candidatos = st.tabs(["Procesar un sujeto (pasos 1-3)", "Atlas candidatos (paso 4, en discusión)"])
+procesar, candidatos = st.tabs(["Procesar un sujeto", "Atlas y ROIs de referencia"])
 
 with procesar:
     modo = st.radio("Entrada", ["Subir archivos", "Ruta local", "Sujeto ya procesado"], horizontal=True)
@@ -114,10 +123,10 @@ with procesar:
         id_sujeto = st.text_input("Identificador", value=_id_desde_ruta(entrada))
 
     if modo != "Sujeto ya procesado" and st.button("Procesar", type="primary", disabled=entrada is None):
-        with st.status("Procesando… (eddy tarda unos 45 min)", expanded=True) as estado:
+        with st.status("Procesando…", expanded=True) as estado:
             try:
                 r = ejecutar(entrada, RESULTADOS / id_sujeto, bval, bvec, id_sujeto=id_sujeto, avisar=st.write)
-                st.session_state["resultado"] = (r["archivos"]["figura"].parent, r["versiones"], r["pasos"])
+                st.session_state["resultado"] = (r["archivos"]["csv"].parent, r["versiones"], r["pasos"], r["fila"])
                 estado.update(label="Listo", state="complete", expanded=False)
             except Exception as e:  # se muestra el error al usuario en vez de cortar la app
                 estado.update(label="Error", state="error")
@@ -128,8 +137,8 @@ with procesar:
 
 with candidatos:
     st.markdown(
-        "Se comparan dos candidatos en el corte de las ROIs de Liu et al. 2024. Ambos vienen con FSL y están en la "
-        "misma grilla MNI de 1 mm.")
+        "**Atlas usado: FSL HCP1065 1 mm** (derecha), con las ROIs esféricas de Liu et al. 2024 como referencia. A la "
+        "izquierda, el JHU-ICBM-FA que usa Liu, para comparar. Ambos vienen con FSL y están en la misma grilla MNI de 1 mm.")
     c1, c2 = st.columns(2)
     c1.markdown("**JHU-ICBM-FA 1 mm**: el template de Liu et al. 2024. Solo FA, sin la dirección de las fibras.")
     c2.markdown("**FSL HCP1065 1 mm**: FA y dirección principal (V1) promedio de 1065 sujetos. En color-FA se ven el "
