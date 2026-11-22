@@ -20,8 +20,8 @@ REPO="$(cd "$(dirname "$0")/.." && pwd)"
 H="$REPO/herramientas"
 DSI_VERSION="2026.7.25"
 case "$(uname -s)-$(uname -m)" in
-  Darwin-arm64)  PLAT=osx-arm64; DSI_ZIP=dsi_studio_macos-14-arm64_qt6.zip ;;
-  Darwin-x86_64) PLAT=osx-64;    DSI_ZIP=dsi_studio_macos-15-intel_qt6.zip ;;
+  Darwin-arm64)  PLAT=osx-arm64; DSI_ZIP=dsi_studio_macos-arm64_qt6.zip ;;
+  Darwin-x86_64) PLAT=osx-64;    DSI_ZIP=dsi_studio_macos-intel_qt6.zip ;;
   Linux-x86_64)  PLAT=linux-64;  DSI_ZIP=dsi_studio_linux_universal_cpu.zip ;;
   *) echo "Sistema no soportado: $(uname -s) $(uname -m)"; exit 1 ;;
 esac
@@ -48,8 +48,10 @@ fi
 "$H/python/bin/python" -m pip install -q --no-cache-dir -r "$REPO/requirements.txt"
 
 echo "== 4/4 DSI Studio $DSI_VERSION"
-if [ ! -d "$H/dsi_studio" ]; then
-  curl -L -o "$H/$DSI_ZIP" "https://github.com/frankyeh/DSI-Studio/releases/download/$DSI_VERSION/$DSI_ZIP"
+# Se descarga si todavía no hay ejecutable (también repara una descarga anterior que falló).
+if [ -z "$(find "$H/dsi_studio" -type f -name dsi_studio 2>/dev/null | head -1)" ]; then
+  rm -rf "$H/dsi_studio" "$H/$DSI_ZIP"
+  curl -fL -o "$H/$DSI_ZIP" "https://github.com/frankyeh/DSI-Studio/releases/download/$DSI_VERSION/$DSI_ZIP"
   mkdir -p "$H/dsi_studio"
   if command -v unzip >/dev/null; then  # macOS trae unzip (respeta los enlaces dentro del .app)
     (cd "$H/dsi_studio" && unzip -q "$H/$DSI_ZIP")
