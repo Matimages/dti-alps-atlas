@@ -64,6 +64,8 @@ herramientas/python/bin/python -m pytest tests
 - Sin TOPUP: ds001378 no tiene una adquisición con fase inversa. Fase y readout de eddy son un SUPUESTO (ver `docs/decisiones.md`).
 - Eddy con sus valores por defecto: sin reemplazo de outliers y sin slice-to-volume.
 - Registro solo afín. Las ROIs son las de referencia de Liu et al. 2024, no dibujadas por neurorradiólogos.
+- El registro no da exactamente lo mismo en todas las plataformas: el mismo sujeto dio ALPS 1.833 en Linux y 1.857 en macOS
+  (Apple Silicon). Las ROIs quedan ~1 mm desplazadas y eddy casi no cambia (detalle en `docs/decisiones.md`).
 
 ## Cita
 

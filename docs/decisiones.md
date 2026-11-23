@@ -128,4 +128,12 @@ Vóxeles en la grilla JHU-ICBM-FA-1mm (182×218×182; x = 90 − i, y = −126 +
 ## Limitaciones conocidas
 
 - Sin TOPUP (no hay adquisición con fase inversa en ds001378).
-- Sin registro no lineal y sin reorientación del tensor (pasos 4-6, en pausa).
+- Sin registro no lineal (solo afín).
+- El registro afín de DIPY (paso 4) no da exactamente lo mismo en todas las plataformas. Con sub-control01 (2026-11-22):
+  - En una misma máquina, repetirlo da una matriz idéntica.
+  - Con el mismo FA de entrada, Linux x86-64 (MATI-PC) y macOS Apple Silicon (MacBook Neo, A18 Pro) convergen a matrices que
+    ponen los centros de las ROIs a 1.0–1.35 mm de distancia en el sujeto: medio vóxel del DWI de 2×2×3 mm.
+  - eddy en cambio casi no cambia: 0.03 mm y 0.03° en los parámetros de movimiento. Las ROIs se mueven solo 0.1–0.2 mm al
+    registrar el FA de cada plataforma en la misma máquina.
+  - ALPS: Linux 1.833 (L 1.867, R 1.799) y Mac 1.857 (L 1.912, R 1.801), un 1.3 %.
+  - Causa probable, no verificada: diferencias de redondeo de las librerías numéricas que cambian el camino del optimizador.
