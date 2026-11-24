@@ -2,9 +2,11 @@
 
 Uso: streamlit run app/app.py (Linux o macOS; en Windows, dentro de WSL)
 """
+import io
 import re
 import sys
 import tempfile
+import zipfile
 from pathlib import Path
 
 import streamlit as st
@@ -35,6 +37,20 @@ def _archivos(carpeta):
              "figura": carpeta / "qc_dti.png", "figura_eddy": carpeta / "qc_eddy.png",
              "rois": carpeta / "rois_atlas.nii.gz", **{m: carpeta / f"dti.fz.{m}.nii.gz" for m in tensor.METRICAS}}
     return {nombre: ruta for nombre, ruta in rutas.items() if ruta.exists()}
+
+
+GRANDES = ("dwi_atlas.nii.gz", "dwi_atlas.sz", "dti.fz")  # intermedios de cientos de MB que se pueden regenerar
+
+
+@st.cache_data(max_entries=2)
+def _zip_resultados(carpeta, marca):
+    """Todos los archivos de la carpeta del sujeto en un .zip, menos GRANDES. `marca` (fecha de alps.csv) renueva la caché."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        for f in sorted(Path(carpeta).iterdir()):
+            if f.is_file() and f.name not in GRANDES:
+                z.write(f, f"{Path(carpeta).name}/{f.name}")
+    return buf.getvalue()
 
 
 def _mostrar_paso(paso, carpeta):
@@ -72,6 +88,9 @@ def _mostrar_resultado(carpeta, versiones, pasos, fila=None):
                 _mostrar_paso(paso, carpeta)
     st.markdown("##### Descargas")
     st.caption(f"Carpeta: {carpeta}")
+    st.download_button("Descargar todo (.zip)", _zip_resultados(str(carpeta), (carpeta / "alps.csv").stat().st_mtime),
+                       f"{carpeta.name}_resultados.zip", type="primary",
+                       help="Todos los archivos del sujeto (figuras, mapas, logs, informe), sin los intermedios más pesados.")
     lista = list(rutas.items())
     for i in range(0, len(lista), 6):  # filas de hasta 6 botones
         for col, (nombre, ruta) in zip(st.columns(6), lista[i:i + 6]):
