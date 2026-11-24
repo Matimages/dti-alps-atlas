@@ -43,6 +43,8 @@ App: en macOS, doble clic en `app/abrir_app.command`, o desde la terminal:
 
 ```bash
 bash app/abrir_app.command
+cd ~/Downloads/dti-alps-atlas-main && bash app/instalar.sh
+cd ~/Downloads/dti-alps-atlas-main && bash app/abrir_app.command
 ```
 
 Se abre en el navegador (http://localhost:8501). Se sube el DWI (zip DICOM, o NIfTI + bval + bvec) o se escribe su ruta.
