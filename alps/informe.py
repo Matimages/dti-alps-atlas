@@ -149,7 +149,7 @@ def _paso5(c):
         "comandos": [], "tabla": [],
         "datos": _voxeles(nib.load(str(c / "fa_sujeto_en_atlas.nii.gz"))),
         "notas": ["Por eso el tensor del paso 6 queda en los ejes del atlas: Dxx es izquierda-derecha del atlas, no de la "
-                  "cabeza del sujeto (decisión de la prof. Chabert)."],
+                  "cabeza del sujeto."],
         "fuentes": [("Leemans & Jones 2009: la matriz b debe rotarse al rotar la imagen", "https://doi.org/10.1002/mrm.21890"),
                     ("Alexander et al. 2001: rotación por descomposición polar (finite strain)", "https://doi.org/10.1109/42.963816"),
                     ("Convención de bvecs de FSL (MRtrix3)", "https://mrtrix.readthedocs.io/en/latest/concepts/dw_scheme.html")],
@@ -194,8 +194,8 @@ def _paso7(fila):
                    "Qué es": "Dxx proy · Dxx asoc · Dyy proy · Dzz asoc (10⁻³ mm²/s)"}
                   for h in ("Hemisferio L", "Hemisferio R")],
         "notas": ["ROIs de referencia: las esferas de Liu et al. 2024, en la misma grilla MNI del atlas (R-SLF en i = 52, "
-                  "como el archivo de gbarisano/alps). Las iban a dibujar los neurorradiólogos; mientras tanto se usan "
-                  "estas (decisión de la prof. Chabert, 2026-11-17)."],
+                  "como el archivo de gbarisano/alps). Se usan como referencia mientras no sea posible contar con ROIs "
+                  "dibujadas por neurorradiólogos sobre el atlas."],
         "fuentes": [("Taoka et al. 2017: definición del índice ALPS", "https://doi.org/10.1007/s11604-017-0617-z"),
                     ("Liu et al. 2024: ROIs esféricas de 5 mm de diámetro y promedio de ambos lados",
                      "https://doi.org/10.14336/AD.2023.0321-2"),
