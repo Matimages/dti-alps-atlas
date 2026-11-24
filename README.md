@@ -28,7 +28,7 @@ Instructivo corto, paso a paso y con los comandos para copiar: [`docs/instalar.m
 Una sola vez, desde la carpeta del repositorio. No usa `sudo` y deja todo dentro de `herramientas/`:
 
 ```bash
-bash app/instalar.sh
+cd ~/Downloads/dti-alps-atlas-main && bash app/instalar.sh
 ```
 
 Instala micromamba, un entorno con Python 3.12 y las librerías de `requirements.txt`, otro entorno aparte con **solo** los
@@ -42,8 +42,6 @@ En Windows: dentro de WSL2 (Ubuntu), porque FSL no tiene versión nativa para Wi
 App: en macOS, doble clic en `app/abrir_app.command`, o desde la terminal:
 
 ```bash
-bash app/abrir_app.command
-cd ~/Downloads/dti-alps-atlas-main && bash app/instalar.sh
 cd ~/Downloads/dti-alps-atlas-main && bash app/abrir_app.command
 ```
 
