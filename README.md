@@ -23,6 +23,8 @@ basa), y `fsl.log` y `dsi_studio.log` con cada comando ejecutado.
 
 ## Instalación (macOS o Linux)
 
+Instructivo corto, paso a paso y con los comandos para copiar: [`docs/instalar.md`](docs/instalar.md).
+
 Una sola vez, desde la carpeta del repositorio. No usa `sudo` y deja todo dentro de `herramientas/`:
 
 ```bash
